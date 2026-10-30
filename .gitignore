@@ -40,6 +40,10 @@
 !/SECURITY.md
 !/stealer/
 !/stealer/**
+# Cleaner output lands here; keep the folder, ignore what is in it.
+!/output/
+/output/*
+!/output/.gitkeep
 
 # Exceptions even inside allowed trees
 .env

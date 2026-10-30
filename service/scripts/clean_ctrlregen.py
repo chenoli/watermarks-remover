@@ -76,7 +76,7 @@ def _progress(message: str) -> None:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("path", type=Path, help="Input image (PNG/JPEG/etc.)")
-    p.add_argument("-o", "--output", type=Path, help="Output path (default: *.ctrlregen.*)")
+    p.add_argument("-o", "--output", type=Path, help="Output path (default: output/*.ctrlregen.*)")
     p.add_argument(
         "--upstream-dir",
         type=Path,

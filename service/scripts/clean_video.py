@@ -458,7 +458,7 @@ def main() -> int:
 
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("path", type=Path, help="Input video (MP4/MOV)")
-    p.add_argument("-o", "--output", type=Path, help="Output path (default: *.video.*)")
+    p.add_argument("-o", "--output", type=Path, help="Output path (default: output/*.video.*)")
     p.add_argument("--remove-pixel", choices=["ctrlregen", "diffusion"], required=True)
     p.add_argument(
         "--vote-threshold", type=float, default=0.5, help="Temporal-vote threshold (default: 0.5)"

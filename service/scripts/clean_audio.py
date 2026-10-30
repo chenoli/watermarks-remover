@@ -22,7 +22,13 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from clean_video import _ffmpeg_available, _run_ffmpeg  # noqa: E402
-from common import safe_arg, subprocess_creationflags, subprocess_preexec_fn, which  # noqa: E402
+from common import (  # noqa: E402
+    cleaned_path,
+    safe_arg,
+    subprocess_creationflags,
+    subprocess_preexec_fn,
+    which,
+)
 
 # Formats detect_av_format reports for audio-only containers.
 AUDIO_FORMATS = {"wav", "mp3", "flac"}
@@ -269,7 +275,7 @@ def main() -> int:
 
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("path", type=Path, help="Input audio (WAV/MP3/FLAC)")
-    p.add_argument("-o", "--output", type=Path, help="Output path (default: *.audio.m4a)")
+    p.add_argument("-o", "--output", type=Path, help="Output path (default: output/*.audio.m4a)")
     p.add_argument("--tempo", type=float, default=1.08, help="Tempo factor (default: 1.08)")
     p.add_argument(
         "--pitch-semitones", type=float, default=2.0, help="Pitch shift in semitones (default: 2.0)"
@@ -281,7 +287,7 @@ def main() -> int:
     p.add_argument("--json", action="store_true", help="Emit JSON on stdout")
     args = p.parse_args()
 
-    output = args.output or args.path.with_name(f"{args.path.stem}.audio.m4a")
+    output = args.output or cleaned_path(args.path, ".audio").with_suffix(".m4a")
     result = audio_purify(
         args.path,
         output,

@@ -541,9 +541,37 @@ def c2patool_probe_note(tools: dict[str, Any]) -> str | None:
     return None
 
 
+def _repo_output_dir() -> Path | None:
+    # A repo checkout ships a tracked root output/ folder (scripts live two
+    # levels below it). Installed skill copies and the Docker image have no
+    # such folder, so they keep writing next to the input.
+    parents = Path(__file__).resolve().parents
+    if len(parents) < 3:
+        return None
+    candidate = parents[2] / "output"
+    return candidate if candidate.is_dir() else None
+
+
+def default_output_dir() -> Path | None:
+    """Directory for cleaner output when no -o is given, or None for "next to input".
+
+    WATERMARKS_OUTPUT_DIR overrides; otherwise the repo-root output/ folder
+    is used when the scripts run from a checkout.
+    """
+    env = os.environ.get("WATERMARKS_OUTPUT_DIR")
+    if env:
+        return Path(env)
+    return _repo_output_dir()
+
+
 def cleaned_path(src: Path, suffix: str = ".cleaned") -> Path:
-    """path/to/file.ext -> path/to/file.cleaned.ext"""
-    return src.with_name(f"{src.stem}{suffix}{src.suffix}")
+    """path/to/file.ext -> <output dir>/file.cleaned.ext (or path/to/file.cleaned.ext)"""
+    name = f"{src.stem}{suffix}{src.suffix}"
+    out_dir = default_output_dir()
+    if out_dir is None:
+        return src.with_name(name)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir / name
 
 
 def which(cmd: str) -> str | None:

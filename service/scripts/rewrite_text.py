@@ -1172,7 +1172,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build CLI argument parser for text rewrite tool."""
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("path", nargs="?", default="-", help="Input text file, or - for stdin")
-    p.add_argument("-o", "--output", help="Output path (default: stdout or *.rewritten.*)")
+    p.add_argument("-o", "--output", help="Output path (default: stdout or output/*.rewritten.*)")
     p.add_argument(
         "--backend",
         choices=("print-prompt", "ollama", "openai-compatible"),

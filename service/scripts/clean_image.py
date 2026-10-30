@@ -17,7 +17,7 @@ from image_meta import clean_image
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("path", type=Path, help="Input image (PNG/JPEG/WebP/AVIF/HEIC/BMP/GIF/TIFF)")
-    p.add_argument("-o", "--output", type=Path, help="Output path (default: *.cleaned.*)")
+    p.add_argument("-o", "--output", type=Path, help="Output path (default: output/*.cleaned.*)")
     p.add_argument(
         "--in-place",
         action="store_true",

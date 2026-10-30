@@ -112,8 +112,9 @@ curl -s -X POST "$WM/clean" -H 'Content-Type: application/json' \
   -d "{\"file\": \"$(base64 < notes.md | tr -d '\n')\", \"name\": \"notes.md\"}"
 ```
 
-Decode the returned `cleaned` base64 into the output file (`*.cleaned.*` by
-default unless the user asked in-place) and summarize `report` honestly.
+Decode the returned `cleaned` base64 into the output file (`*.cleaned.*` in
+the repo-root `output/` folder by default, unless the user asked in-place) and
+summarize `report` honestly. Cleaned pasted text is saved there too.
 
 (On Windows agents, build base64 with
 `[Convert]::ToBase64String([IO.File]::ReadAllBytes("notes.md"))`.)
@@ -181,7 +182,8 @@ curl -s -X POST "$WM/clean" -H 'Content-Type: application/json' \
   -d "{\"file\": \"$(base64 < INPUT | tr -d '\n')\", \"name\": \"$(basename INPUT)\"}"
 ```
 
-Decode `cleaned` → `OUTPUT` (`*.cleaned.*` unless the user asked in-place).
+Decode `cleaned` → `OUTPUT` (`output/*.cleaned.*` at the repo root unless the
+user asked in-place).
 Re-inspect the result when residual risk matters.
 
 PDF needs `exiftool` + `qpdf` server-side for a real strip; the report notes a
@@ -314,7 +316,7 @@ Always state:
 - What Layer B did (best-effort statistical; **cannot claim official "undetectable"**). Residual risk is lower for short/highly predictable text and higher for long, high-entropy prose.
 - Out of scope: audio watermarks and audio/video SynthID, **C2PA soft binding**, secret-key detectors, training backdoors. Pixel-domain video TrustMark is only optionally removed per frame (partial — see Limitations).
 - Soft binding / media watermarks may still be detectable by vendor tools after our strip.
-- Prefer writing `*.cleaned.*` unless user asked in-place.
+- Prefer writing `*.cleaned.*` into the repo-root `output/` folder unless user asked in-place.
 - Ethics one-liner: own content / no compliance theater.
 
 ## Limitations

@@ -290,6 +290,12 @@ python3 "$SCRIPTS/inspect_image.py" shot.png
 python3 "$SCRIPTS/clean_image.py" shot.png -o shot.cleaned.png
 ```
 
+Without `-o`, the cleaners (`clean_file`, `clean_text`, `clean_image`,
+`clean_video`, `clean_audio`, `clean_ctrlregen`, `rewrite_text`) write to the
+repo-root `output/` folder (e.g. `output/draft.cleaned.md`). Its contents are
+gitignored. Set `WATERMARKS_OUTPUT_DIR` to pick another folder; outside a repo
+checkout (Docker image, installed skill copy) the default stays next to the input.
+
 ### Text tools refuse binary input
 
 `inspect_text.py`, `clean_text.py` and `rewrite_text.py` operate on text. Pointed
@@ -476,6 +482,7 @@ set -a; . ./.env; set +a; python3 service/scripts/rewrite_text.py /tmp/x.txt -o 
 | `WATERMARKS_SYNTHID_TEXT_TIMEOUT` | `wr-core` | Seconds to wait for the `wr-synthid-text` sidecar (default 120) |
 | `WATERMARKS_MARKLLM_SCHEME` | `text_detectors.py` (host) | MarkLLM scheme for `/detect`: `kgw` (default) / `synthid` |
 | `HF_TOKEN` | harness/heavy services | Hugging Face token for gated models |
+| `WATERMARKS_OUTPUT_DIR` | CLI cleaners (host) | Folder for output when `-o` is omitted; default repo-root `output/` |
 | `WATERMARKS_SERVICE_URL` | client only (skill / curl) | Where to reach the service; default `http://127.0.0.1:8765` |
 | `WATERMARKS_REWRITE_BACKEND` | `rewrite_text.py` hook | `print-prompt` (default) / `ollama` / `openai-compatible` |
 | `WATERMARKS_REWRITE_MODEL` | `rewrite_text.py` hook | Model name (e.g. `deepseek-v4-flash`) |

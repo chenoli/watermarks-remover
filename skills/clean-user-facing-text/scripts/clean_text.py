@@ -23,7 +23,7 @@ from text_unicode import clean_text
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("path", nargs="?", default="-", help="Input text file, or - for stdin")
-    p.add_argument("-o", "--output", help="Output path (default: stdout or *.cleaned.*)")
+    p.add_argument("-o", "--output", help="Output path (default: stdout or output/*.cleaned.*)")
     p.add_argument("--nfkc", action="store_true", help="Apply Unicode NFKC after scrub")
     p.add_argument(
         "--aggressive-homoglyphs",
