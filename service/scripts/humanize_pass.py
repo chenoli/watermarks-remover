@@ -8,6 +8,11 @@ no em/en dashes or double hyphens, common filler-phrase collapses, and the
 unambiguous ``utilize`` -> ``use`` swap. Everything that needs judgment (voice,
 rhythm, promotional language, passive voice, rule-of-three) lives in the
 rewrite prompt; this pass only changes text where the edit is always correct.
+
+``strip_dashes`` (the em/en-dash removal step) is exported separately and is
+run unconditionally on every Layer B tactic's output, not just ``humanize``:
+em dashes are a well-known AI tell on their own, so no rewrite path should be
+able to reintroduce one.
 """
 
 from __future__ import annotations
@@ -55,7 +60,14 @@ def _straighten_quotes(text: str) -> str:
     return text
 
 
-def _replace_dashes(text: str) -> str:
+def strip_dashes(text: str) -> str:
+    """Replace em/en dashes and prose double-hyphens with commas.
+
+    Public: used both by ``humanize_pass`` and, unconditionally, by every
+    Layer B rewrite tactic (see ``rewrite_text.py``), since em dashes are a
+    well-known AI stylistic tell and no rewrite tactic should reintroduce one.
+    Numeric ranges (``2019-2020``) and CLI flags (``--tactic``) are left alone.
+    """
     _DASH = re.compile(r"\s*[\u2014\u2013]\s*")
     _DBL_HYPHEN = re.compile(r"(\s*)--(\s*)")
 
@@ -109,7 +121,7 @@ def _swap_words(text: str) -> str:
 def humanize_pass(text: str) -> str:
     """Apply the deterministic humanizer transforms to *text*."""
     text = _straighten_quotes(text)
-    text = _replace_dashes(text)
+    text = strip_dashes(text)
     text = _collapse_phrases(text)
     text = _swap_words(text)
     return text

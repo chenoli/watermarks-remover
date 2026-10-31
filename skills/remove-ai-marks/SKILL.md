@@ -234,7 +234,8 @@ Rewrite the following text so that it uses substantially different wording at
 the token level. Change clause order, connectors, and transition words; vary
 sentence boundaries and length; and replace both content words and function
 words where meaning allows. Preserve all facts, numbers, names, and technical
-identifiers. Do not add or remove claims. Output only the rewritten text.
+identifiers. Do not use em dashes; use a comma, period, or parentheses instead.
+Do not add or remove claims. Output only the rewritten text.
 
 ---
 {TEXT}
@@ -245,8 +246,9 @@ identifiers. Do not add or remove claims. Output only the rewritten text.
 ```
 Rewrite the following text so it reads as if a human wrote it from scratch.
 Vary sentence rhythm and length, replace formulaic AI-style transitions and
-filler with concrete natural phrasing, and use plain, varied wording. Preserve
-all facts, numbers, names, and technical identifiers. Do not add or remove
+filler with concrete natural phrasing, and use plain, varied wording. Do not
+use em dashes; use a comma, period, or parentheses instead. Preserve all
+facts, numbers, names, and technical identifiers. Do not add or remove
 claims. Output only the rewritten text.
 
 ---
@@ -257,10 +259,11 @@ claims. Output only the rewritten text.
 
 ```
 Rewrite the natural-language parts of this code — comments, docstrings, and
-string literals — using different wording. Rename local variables, function
-parameters, and private helper names to semantically equivalent names. Preserve
-program behavior, public API names, and all values that affect output. Output
-only the rewritten code.
+string literals — using different wording. Do not use em dashes in the
+rewritten comments/docstrings/strings; use a comma, period, or parentheses
+instead. Rename local variables, function parameters, and private helper
+names to semantically equivalent names. Preserve program behavior, public
+API names, and all values that affect output. Output only the rewritten code.
 
 ---
 {TEXT}
@@ -287,7 +290,8 @@ Then:
 
 ```
 Write a complete document from this outline in natural, varied human prose.
-Avoid formulaic transitions. Do not omit any bullet. Output only the document.
+Avoid formulaic transitions. Do not use em dashes; use a comma, period, or
+parentheses instead. Do not omit any bullet. Output only the document.
 ```
 
 ### Aggregate audits (directories / websites)

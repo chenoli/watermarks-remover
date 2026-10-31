@@ -191,8 +191,8 @@ def test_humanize_tactic_applies_deterministic_pass(monkeypatch):
     assert info["evaluator"] == "lexical-divergence"
 
 
-def test_non_humanize_tactic_skips_deterministic_pass(monkeypatch):
-    """Only the humanize tactic runs the humanizer pass."""
+def test_non_humanize_tactic_still_strips_dashes(monkeypatch):
+    """Only humanize runs the full humanizer pass, but every tactic strips em dashes."""
     monkeypatch.setattr(
         rewrite_text,
         "call_ollama",
@@ -202,7 +202,9 @@ def test_non_humanize_tactic_skips_deterministic_pass(monkeypatch):
         "the cat sat on the mat",
         **_rewrite_candidates_kwargs(tactic="paraphrase", candidates=1),
     )
-    assert out == "alpha\u2014beta in order to gamma"
+    # Dash stripped (unconditional), but filler collapse ("in order to" -> "to")
+    # is humanize-only and left untouched here.
+    assert out == "alpha, beta in order to gamma"
 
 
 def test_lexical_divergence_identical_is_zero():

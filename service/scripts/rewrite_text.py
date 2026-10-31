@@ -64,7 +64,7 @@ from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import cleaned_path, eprint, read_text_input, write_text_output
-from humanize_pass import humanize_pass
+from humanize_pass import humanize_pass, strip_dashes
 from text_detectors import GumbelTextDetector, MarkLLMTextDetector
 from text_unicode import clean_text
 
@@ -77,7 +77,8 @@ PROMPTS = {
         "Rewrite the following text so that it uses substantially different wording at "
         "the token level. Change clause order, connectors, and transition words; vary "
         "sentence boundaries and length; and replace both content words and function "
-        "words where meaning allows. Preserve all facts, numbers, names, and technical "
+        "words where meaning allows. Do not use em dashes; use a comma, period, or "
+        "parentheses instead. Preserve all facts, numbers, names, and technical "
         "identifiers. Do not add or remove claims. Output only the rewritten text.\n\n---\n{TEXT}"
     ),
     "humanize": (
@@ -98,10 +99,12 @@ PROMPTS = {
     ),
     "code": (
         "Rewrite the natural-language parts of this code — comments, docstrings, and "
-        "string literals — using different wording. Rename local variables, function "
-        "parameters, and private helper names to semantically equivalent names. Preserve "
-        "program behavior, public API names, and all values that affect output. Output "
-        "only the rewritten code.\n\n---\n{TEXT}"
+        "string literals — using different wording. Do not use em dashes in the "
+        "rewritten comments/docstrings/strings; use a comma, period, or parentheses "
+        "instead. Rename local variables, function parameters, and private helper "
+        "names to semantically equivalent names. Preserve program behavior, public "
+        "API names, and all values that affect output. Output only the rewritten "
+        "code.\n\n---\n{TEXT}"
     ),
     "backtranslate_out": (
         "Translate the following text to {LANG}. Output only the translation.\n\n---\n{TEXT}"
@@ -125,7 +128,8 @@ PROMPTS = {
         "everything is rewritten. At low values keep the sentence structure, word "
         "order, and every token that can stay, changing only function words and a "
         "few non-essential content words. At high values change wording substantially "
-        "at the token level. Preserve all facts, numbers, names, and technical "
+        "at the token level. Do not use em dashes; use a comma, period, or "
+        "parentheses instead. Preserve all facts, numbers, names, and technical "
         "identifiers. Do not add or remove claims. Output only the rewritten text."
         "\n\n---\n{TEXT}"
     ),
@@ -133,7 +137,8 @@ PROMPTS = {
         "Rewrite only this fragment to change a modest fraction of its tokens. "
         "At low intensity keep the sentence structure, word order, and every "
         "token that can stay, changing only function words and a few "
-        "non-essential content words. Preserve all facts, numbers, names, and "
+        "non-essential content words. Do not use em dashes; use a comma, period, "
+        "or parentheses instead. Preserve all facts, numbers, names, and "
         "technical identifiers. Do not add or remove claims. Output only the "
         "rewritten fragment.\n\n---\n{TEXT}"
     ),
@@ -880,6 +885,10 @@ def rewrite(
             cand = _generate_candidate()
             if tactic == "humanize":
                 cand = humanize_pass(cand)
+            else:
+                # Em dashes are an AI tell on their own; strip them regardless
+                # of tactic, even though only `humanize` runs the full pass.
+                cand = strip_dashes(cand)
             cand_stats: dict | None = None
             if layer_a_after:
                 cand, cand_stats = clean_text(cand)
@@ -1157,6 +1166,11 @@ def apply_strategy(
                 "out_chars": len(cur),
             }
         )
+    # Em dashes are an AI tell on their own; strip them from the complete
+    # strategy output regardless of which tactics ran (mirrors the single-
+    # tactic `rewrite()` path, which strips per candidate).
+    if cur:
+        cur = strip_dashes(cur)
     # Layer A scrub once, on the complete strategy output (not per step).
     if layer_a_after and cur:
         cur = clean_text(cur)[0]
