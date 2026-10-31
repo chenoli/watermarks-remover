@@ -235,7 +235,14 @@ the token level. Change clause order, connectors, and transition words; vary
 sentence boundaries and length; and replace both content words and function
 words where meaning allows. Preserve all facts, numbers, names, and technical
 identifiers. Do not use em dashes; use a comma, period, or parentheses instead.
-Do not add or remove claims. Output only the rewritten text.
+Do not add or remove claims. Never translate: keep the text in its original language and regional variant
+(e.g. Brazilian vs European Portuguese, US vs UK English), and if it has
+sections in different languages, rewrite each section in its own language,
+keeping every section, its heading, and the section order. Keep the meaning
+exactly the same (same claims, tone, and intent) and leave hashtags, code,
+URLs, and line breaks between sections as they are. The result must be
+grammatically correct and natural in its language. Output only the rewritten
+text.
 
 ---
 {TEXT}
@@ -249,7 +256,14 @@ Vary sentence rhythm and length, replace formulaic AI-style transitions and
 filler with concrete natural phrasing, and use plain, varied wording. Do not
 use em dashes; use a comma, period, or parentheses instead. Preserve all
 facts, numbers, names, and technical identifiers. Do not add or remove
-claims. Output only the rewritten text.
+claims. Never translate: keep the text in its original language and regional variant
+(e.g. Brazilian vs European Portuguese, US vs UK English), and if it has
+sections in different languages, rewrite each section in its own language,
+keeping every section, its heading, and the section order. Keep the meaning
+exactly the same (same claims, tone, and intent) and leave hashtags, code,
+URLs, and line breaks between sections as they are. The result must be
+grammatically correct and natural in its language. Output only the rewritten
+text.
 
 ---
 {TEXT}

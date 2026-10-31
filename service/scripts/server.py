@@ -968,7 +968,7 @@ def _apply_layer_b(text: str, strategy: str, options: dict[str, Any]) -> tuple[s
     Raises ValueError for an unconfigured/unavailable backend or model so the
     caller surfaces a 400 rather than a 500. Wraps runtime failures the same way.
     """
-    from rewrite_text import LLM_TACTICS, apply_strategy, parse_strategy
+    from rewrite_text import LLM_TACTICS, apply_strategy, apply_strategy_verified, parse_strategy
 
     steps = parse_strategy(strategy)
     needs_llm = any(t in LLM_TACTICS for t, _ in steps)
@@ -1008,25 +1008,37 @@ def _apply_layer_b(text: str, strategy: str, options: dict[str, Any]) -> tuple[s
                 "Layer B strategy uses a remote rewrite endpoint; set "
                 "WATERMARKS_REWRITE_ALLOW_REMOTE=1"
             )
+    kwargs: dict[str, Any] = {
+        "backend": backend,
+        "model": os.environ.get("WATERMARKS_REWRITE_MODEL"),
+        "base_url": os.environ.get("WATERMARKS_REWRITE_BASE_URL"),
+        "api_key": os.environ.get("WATERMARKS_REWRITE_API_KEY"),
+        "temperature": float(os.environ.get("WATERMARKS_REWRITE_TEMPERATURE", "0.9")),
+        # Per LLM call; slow local models (CPU / small GPUs) need more than 120 s.
+        "timeout": float(os.environ.get("WATERMARKS_REWRITE_TIMEOUT", "120")),
+        "reasoning_effort": (
+            None
+            if os.environ.get("WATERMARKS_REWRITE_REASONING_EFFORT") == "off"
+            else os.environ.get("WATERMARKS_REWRITE_REASONING_EFFORT") or None
+        ),
+        "style": options.get("style"),
+        "layer_a_after": bool(options.get("also_layer_a_text")),
+    }
+    # Fidelity check (setup.cmd's precise/balanced profiles): a second LLM call
+    # judges meaning, facts, languages and grammar; failed rewrites are retried
+    # and, if none passes, the request fails instead of returning a bad rewrite.
+    verify = os.environ.get("WATERMARKS_REWRITE_VERIFY", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
     try:
-        out, stats = apply_strategy(
-            text,
-            steps,
-            backend=backend,
-            model=os.environ.get("WATERMARKS_REWRITE_MODEL"),
-            base_url=os.environ.get("WATERMARKS_REWRITE_BASE_URL"),
-            api_key=os.environ.get("WATERMARKS_REWRITE_API_KEY"),
-            temperature=float(os.environ.get("WATERMARKS_REWRITE_TEMPERATURE", "0.9")),
-            # Per LLM call; slow local models (CPU / small GPUs) need more than 120 s.
-            timeout=float(os.environ.get("WATERMARKS_REWRITE_TIMEOUT", "120")),
-            reasoning_effort=(
-                None
-                if os.environ.get("WATERMARKS_REWRITE_REASONING_EFFORT") == "off"
-                else os.environ.get("WATERMARKS_REWRITE_REASONING_EFFORT") or None
-            ),
-            style=options.get("style"),
-            layer_a_after=bool(options.get("also_layer_a_text")),
-        )
+        if verify:
+            retries = int(os.environ.get("WATERMARKS_REWRITE_VERIFY_RETRIES", "2"))
+            out, stats = apply_strategy_verified(text, steps, retries=retries, **kwargs)
+        else:
+            out, stats = apply_strategy(text, steps, **kwargs)
     except (RuntimeError, TimeoutError, urllib.error.URLError) as e:
         raise ValueError(f"Layer B rewrite failed: {e}") from e
     return out, stats

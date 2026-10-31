@@ -73,12 +73,13 @@ class Profile:
     key: str
     strategy: str
     temperature: str
+    verify: bool  # fidelity check after the rewrite (see WATERMARKS_REWRITE_VERIFY)
 
 
 PROFILES: list[Profile] = [
-    Profile("precise", "paraphrase@0.8", "0.3"),
-    Profile("balanced", "paraphrase@0.8,humanize@0.5", "0.5"),
-    Profile("aggressive", "paraphrase@0.8,mlm@0.2", "0.9"),
+    Profile("precise", "paraphrase@0.8", "0.3", True),
+    Profile("balanced", "paraphrase@0.8,humanize@0.5", "0.5", True),
+    Profile("aggressive", "paraphrase@0.8,mlm@0.2", "0.9", False),
 ]
 
 # Every key this wizard owns in .env. Keys missing from a result are removed,
@@ -91,6 +92,7 @@ MANAGED_KEYS = (
     "WATERMARKS_REWRITE_ALLOW_REMOTE",
     "WATERMARKS_REWRITE_REASONING_EFFORT",
     "WATERMARKS_REWRITE_TEMPERATURE",
+    "WATERMARKS_REWRITE_VERIFY",
     "WATERMARKS_CLEAN_STRATEGY",
 )
 
@@ -110,9 +112,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "model": "Choose the model (Enter = {default})",
         "model_type": "Model name",
         "profile": "Choose the rewrite profile",
-        "precise": "Precise (recommended): one careful paraphrase, low temperature",
-        "balanced": "Balanced: paraphrase + humanize",
-        "aggressive": "Aggressive: paraphrase + mlm word swaps (English text only)",
+        "precise": "Precise (recommended): one careful paraphrase + fidelity check",
+        "balanced": "Balanced: paraphrase + humanize + fidelity check",
+        "aggressive": "Aggressive: paraphrase + mlm word swaps (English only, no check)",
         "testing": "Testing the connection...",
         "test_ok": "Connection OK.",
         "test_failed": "Connection failed: {err}",
@@ -141,9 +143,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "model": "Escolha o modelo (Enter = {default})",
         "model_type": "Nome do modelo",
         "profile": "Escolha o perfil de reescrita",
-        "precise": "Preciso (recomendado): uma paráfrase cuidadosa, temperatura baixa",
-        "balanced": "Equilibrado: paráfrase + humanização",
-        "aggressive": "Agressivo: paráfrase + troca de palavras mlm (só texto em inglês)",
+        "precise": "Preciso (recomendado): uma paráfrase cuidadosa + verificação de fidelidade",
+        "balanced": "Equilibrado: paráfrase + humanização + verificação de fidelidade",
+        "aggressive": "Agressivo: paráfrase + troca de palavras mlm (só inglês, sem verificação)",
         "testing": "Testando a conexão...",
         "test_ok": "Conexão OK.",
         "test_failed": "A conexão falhou: {err}",
@@ -227,6 +229,7 @@ def build_env_updates(
             "WATERMARKS_REWRITE_BASE_URL": base_url,
             "WATERMARKS_REWRITE_TEMPERATURE": profile.temperature,
             "WATERMARKS_CLEAN_STRATEGY": profile.strategy,
+            "WATERMARKS_REWRITE_VERIFY": "1" if profile.verify else None,
         }
     )
     if api_key:

@@ -72,6 +72,18 @@ DEFAULT_MARKLLM_MODEL = "facebook/opt-1.3b"
 DEFAULT_CANDIDATES = 1
 DEFAULT_MAX_LOOPS = 1
 
+# Part of every prose rewrite prompt: the rewrite exists to change tokens,
+# never meaning, language, or correctness.
+_FIDELITY = (
+    "Never translate: keep the text in its original language and regional variant "
+    "(e.g. Brazilian vs European Portuguese, US vs UK English), and if it has "
+    "sections in different languages, rewrite each section in its own language, "
+    "keeping every section, its heading, and the section order. Keep the meaning "
+    "exactly the same (same claims, tone, and intent) and leave hashtags, code, "
+    "URLs, and line breaks between sections as they are. The result must be "
+    "grammatically correct and natural in its language. "
+)
+
 PROMPTS = {
     "paraphrase": (
         "Rewrite the following text so that it uses substantially different wording at "
@@ -79,7 +91,9 @@ PROMPTS = {
         "sentence boundaries and length; and replace both content words and function "
         "words where meaning allows. Do not use em dashes; use a comma, period, or "
         "parentheses instead. Preserve all facts, numbers, names, and technical "
-        "identifiers. Do not add or remove claims. Output only the rewritten text.\n\n---\n{TEXT}"
+        "identifiers. Do not add or remove claims. "
+        + _FIDELITY
+        + "Output only the rewritten text.\n\n---\n{TEXT}"
     ),
     "humanize": (
         "Rewrite the following text so it reads as if a human wrote it from scratch. "
@@ -94,8 +108,9 @@ PROMPTS = {
         'Avoid AI vocabulary ("additionally", "delve", "crucial", "foster", '
         '"leverage", "utilize", "interplay", and abstract "landscape"). Do not add '
         "em dashes, bold text, emojis, or curly quotes. Preserve all facts, numbers, "
-        "names, and technical identifiers. Do not add or remove claims. Output only the "
-        "rewritten text.\n\n---\n{TEXT}"
+        "names, and technical identifiers. Do not add or remove claims. "
+        + _FIDELITY
+        + "Output only the rewritten text.\n\n---\n{TEXT}"
     ),
     "code": (
         "Rewrite the natural-language parts of this code — comments, docstrings, and "
@@ -130,8 +145,9 @@ PROMPTS = {
         "few non-essential content words. At high values change wording substantially "
         "at the token level. Do not use em dashes; use a comma, period, or "
         "parentheses instead. Preserve all facts, numbers, names, and technical "
-        "identifiers. Do not add or remove claims. Output only the rewritten text."
-        "\n\n---\n{TEXT}"
+        "identifiers. Do not add or remove claims. "
+        + _FIDELITY
+        + "Output only the rewritten text.\n\n---\n{TEXT}"
     ),
     "chunk_unit": (
         "Rewrite only this fragment to change a modest fraction of its tokens. "
@@ -139,8 +155,9 @@ PROMPTS = {
         "token that can stay, changing only function words and a few "
         "non-essential content words. Do not use em dashes; use a comma, period, "
         "or parentheses instead. Preserve all facts, numbers, names, and "
-        "technical identifiers. Do not add or remove claims. Output only the "
-        "rewritten fragment.\n\n---\n{TEXT}"
+        "technical identifiers. Do not add or remove claims. "
+        + _FIDELITY
+        + "Output only the rewritten fragment.\n\n---\n{TEXT}"
     ),
 }
 
@@ -341,7 +358,8 @@ def _intensity_clause(level: float) -> str:
         "keep the sentence structure, word order, and every token that can stay, "
         "changing only function words and a few non-essential content words; at high "
         "intensity change wording substantially at the token level. Preserve all facts, "
-        "numbers, names, and technical identifiers. Do not add or remove claims."
+        "numbers, names, and technical identifiers. Do not add or remove claims. "
+        "Never translate any part, keep the meaning identical, and keep the grammar correct."
     )
 
 
@@ -1180,6 +1198,107 @@ def apply_strategy(
         "input_chars": len(text),
         "output_chars": len(cur),
     }
+
+
+# --- fidelity check -----------------------------------------------------------
+
+FIDELITY_CHECKS = ("same_meaning", "facts_preserved", "same_languages", "grammar_ok")
+
+VERIFY_PROMPT = (
+    "You check a rewrite for fidelity. Compare ORIGINAL and REWRITE and answer with "
+    "a single JSON object and nothing else:\n"
+    '{"same_meaning": true|false, "facts_preserved": true|false, '
+    '"same_languages": true|false, "grammar_ok": true|false, "issues": ["..."]}\n'
+    "- same_meaning: every claim, its tone, and its intent are unchanged; nothing "
+    "added, removed, softened, or strengthened.\n"
+    "- facts_preserved: numbers, names, versions, technical identifiers, code, URLs, "
+    "and hashtags are unchanged.\n"
+    "- same_languages: every section is still in its original language and regional "
+    "variant, e.g. pt-BR stays pt-BR (nothing translated, no section dropped or "
+    "merged).\n"
+    "- grammar_ok: the rewrite is grammatically correct and natural in its "
+    "language(s).\n"
+    "Different wording alone is not an issue; that is the goal of the rewrite. List "
+    "each concrete problem in issues (empty list when all checks pass).\n\n"
+    "ORIGINAL:\n<<<\n{ORIGINAL}\n>>>\n\nREWRITE:\n<<<\n{REWRITE}\n>>>"
+)
+
+
+def parse_verdict(raw: str) -> dict[str, Any]:
+    """Parse the judge's JSON verdict; anything unparseable counts as a failure."""
+    start, end = raw.find("{"), raw.rfind("}")
+    try:
+        data = json.loads(raw[start : end + 1]) if start != -1 and end > start else None
+    except json.JSONDecodeError:
+        data = None
+    if not isinstance(data, dict):
+        return {"passed": False, "issues": ["unparseable fidelity verdict"]}
+    verdict: dict[str, Any] = {k: data.get(k) is True for k in FIDELITY_CHECKS}
+    issues = data.get("issues")
+    verdict["issues"] = [str(i) for i in issues] if isinstance(issues, list) else []
+    verdict["passed"] = all(verdict[k] for k in FIDELITY_CHECKS)
+    return verdict
+
+
+def verify_fidelity(
+    original: str,
+    rewrite: str,
+    *,
+    backend: str,
+    model: str,
+    base_url: str,
+    api_key: str | None,
+    timeout: float = 120.0,
+    reasoning_effort: str | None = None,
+) -> dict[str, Any]:
+    """Ask the rewrite model to judge meaning, facts, languages and grammar.
+
+    Temperature 0: the verdict should be as deterministic as the backend allows.
+    """
+    prompt = VERIFY_PROMPT.replace("{ORIGINAL}", original).replace("{REWRITE}", rewrite)
+    raw = _generate_once(backend, base_url, model, api_key, prompt, timeout, 0.0, reasoning_effort)
+    return parse_verdict(raw)
+
+
+def apply_strategy_verified(
+    text: str,
+    steps: list[tuple[str, float]],
+    *,
+    retries: int = 2,
+    **kwargs: Any,
+) -> tuple[str, dict[str, Any]]:
+    """apply_strategy plus a fidelity check, retrying failed rewrites.
+
+    Each attempt rewrites the original *text* from scratch (not the previous
+    attempt). Returns the first rewrite whose verdict passes, with every
+    verdict under ``stats["verification"]``. Raises RuntimeError when no
+    attempt passes, so a meaning-changing rewrite is never returned.
+    """
+    if not any(t in LLM_TACTICS for t, _ in steps):
+        # mlm-only strategies have no LLM to judge with.
+        out, stats = apply_strategy(text, steps, **kwargs)
+        stats["verification"] = {"passed": None, "skipped": "no LLM step"}
+        return out, stats
+    verify_kwargs = {
+        k: kwargs.get(k) for k in ("backend", "model", "base_url", "api_key", "reasoning_effort")
+    }
+    verify_kwargs["timeout"] = kwargs.get("timeout", 120.0)
+    verdicts: list[dict[str, Any]] = []
+    for _attempt in range(1 + max(0, retries)):
+        out, stats = apply_strategy(text, steps, **kwargs)
+        verdict = verify_fidelity(text, out, **verify_kwargs)
+        verdicts.append(verdict)
+        if verdict["passed"]:
+            stats["verification"] = {
+                "passed": True,
+                "attempts": len(verdicts),
+                "verdicts": verdicts,
+            }
+            return out, stats
+    issues = "; ".join(i for v in verdicts for i in v.get("issues", []))[:500]
+    raise RuntimeError(
+        f"fidelity check failed after {len(verdicts)} attempt(s): {issues or 'no details'}"
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
