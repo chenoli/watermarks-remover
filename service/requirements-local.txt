@@ -1,0 +1,6 @@
+# Host-side Layer B extras used by the local launcher (start-service.cmd):
+# the `mlm` rewrite step needs transformers + torch. Exact pins, no drift.
+# torch is installed first from the PyTorch CPU index (no CUDA download);
+# its +cpu build satisfies the pin below.
+torch==2.15.0
+transformers==5.22.1

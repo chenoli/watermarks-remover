@@ -248,6 +248,23 @@ python3 service/scripts/server.py --host 127.0.0.1 --port 8765
 
 ### Windows (no Docker)
 
+**One command:** double-click `start-service.cmd` at the repo root (or run
+`.\start-service.cmd`). It sets up everything the default text clean needs and
+is safe to run again at any time:
+
+1. creates `.venv` and installs the `mlm` extras (`service/requirements-local.txt`:
+   CPU-only torch + transformers), only when missing;
+2. loads `.env` into the server's environment (with no `.env`, the rewrite
+   backend defaults to local Ollama with `qwen2.5:7b`);
+3. for the `ollama` backend, starts Ollama if it is not answering and pulls the
+   model if it is missing (install Ollama from <https://ollama.com/download>);
+4. pre-downloads `roberta-large` so the first `/clean` does not time out;
+5. restarts any `server.py` already on port 8765 and waits for `/health`.
+
+Logs go to `logs/service.log` and `logs/service.err.log`. The first run
+downloads a few GB (torch, roberta-large, the Ollama model). Options:
+`-Port 8800`, `-BindHost 0.0.0.0`.
+
 See [docs/windows-autostart.md](docs/windows-autostart.md) for auto-starting the service at Windows login without Docker.
 
 For the whole infra (core + optional harness/heavy backends), see [Docker / compose](#docker--compose) below.
@@ -490,6 +507,7 @@ set -a; . ./.env; set +a; python3 service/scripts/rewrite_text.py /tmp/x.txt -o 
 | `WATERMARKS_REWRITE_API_KEY` | `rewrite_text.py` hook | API key — env only, never on argv |
 | `WATERMARKS_REWRITE_ALLOW_REMOTE` | `rewrite_text.py` hook | `1` to allow non-loopback endpoints |
 | `WATERMARKS_REWRITE_REASONING_EFFORT` | `rewrite_text.py` hook | `none` (default) / `low` / `medium` / `high` / `off` |
+| `WATERMARKS_REWRITE_TIMEOUT` | `/clean` Layer B (server) | Seconds per rewrite call (default 120; `start-service.cmd` uses 900) |
 | `WATERMARKS_CLEAN_STRATEGY_FILE` | `server.py` `/clean` | Path to the Layer B strategy config JSON (default `config/clean_strategy.json`) |
 | `WATERMARKS_GUMBEL_KEY` | `detect_gumbel.py` / `text_detectors.py` | Secret key for keyed-Gumbel (EXP) same-key replay (e.g. `0x…`); preferred over argv — never logged |
 

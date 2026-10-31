@@ -177,6 +177,26 @@ def test_apply_layer_b_ollama_does_not_require_api_key(monkeypatch):
     assert out == "out"
 
 
+@pytest.mark.parametrize(("env", "expected"), [(None, 120.0), ("900", 900.0)])
+def test_apply_layer_b_rewrite_timeout_from_env(monkeypatch, env, expected):
+    monkeypatch.setenv("WATERMARKS_REWRITE_BACKEND", "ollama")
+    monkeypatch.setenv("WATERMARKS_REWRITE_MODEL", "m")
+    monkeypatch.setenv("WATERMARKS_REWRITE_BASE_URL", "http://127.0.0.1:11434")
+    if env is None:
+        monkeypatch.delenv("WATERMARKS_REWRITE_TIMEOUT", raising=False)
+    else:
+        monkeypatch.setenv("WATERMARKS_REWRITE_TIMEOUT", env)
+    seen = {}
+
+    def fake_apply(*_a, **k):
+        seen["timeout"] = k["timeout"]
+        return "out", {"steps": []}
+
+    monkeypatch.setattr(rewrite_text, "apply_strategy", fake_apply)
+    _apply_layer_b("x", "paraphrase@0.8", {})
+    assert seen["timeout"] == expected
+
+
 def test_apply_layer_b_mlm_needs_transformers(monkeypatch):
     import importlib.util
 

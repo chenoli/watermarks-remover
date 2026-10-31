@@ -1003,6 +1003,8 @@ def _apply_layer_b(text: str, strategy: str, options: dict[str, Any]) -> tuple[s
             base_url=os.environ.get("WATERMARKS_REWRITE_BASE_URL"),
             api_key=os.environ.get("WATERMARKS_REWRITE_API_KEY"),
             temperature=float(os.environ.get("WATERMARKS_REWRITE_TEMPERATURE", "0.9")),
+            # Per LLM call; slow local models (CPU / small GPUs) need more than 120 s.
+            timeout=float(os.environ.get("WATERMARKS_REWRITE_TIMEOUT", "120")),
             reasoning_effort=(
                 None
                 if os.environ.get("WATERMARKS_REWRITE_REASONING_EFFORT") == "off"

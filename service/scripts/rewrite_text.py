@@ -422,6 +422,9 @@ _MLM_SKIP_WORDS = {
 }
 _MLM_TOKEN_RE = re.compile(r"(\s+|[.,;:!?()\"'—-])")
 _MLM_MAX_TOKENS = 512  # roberta-large positional limit
+# Canonical Hub id: the legacy "roberta-large" alias redirects, but Xet
+# downloads through the alias fail with 404 on a fresh cache.
+_MLM_MODEL = "FacebookAI/roberta-large"
 _MLM_CACHE: dict[str, Any] = {}  # {"pipeline": ..., "mask_token": ...}
 
 
@@ -447,7 +450,7 @@ def _get_mlm() -> tuple[Any, str]:
             from transformers import pipeline
         except Exception as e:  # fail-soft: optional dependency
             raise RuntimeError(f"mlm tactic unavailable: {e}") from e
-        kwargs: dict[str, Any] = {"model": "roberta-large"}
+        kwargs: dict[str, Any] = {"model": _MLM_MODEL}
         if _cuda_available():
             kwargs["device"] = 0
         _MLM_CACHE["pipeline"] = pipeline("fill-mask", **kwargs)

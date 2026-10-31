@@ -38,6 +38,7 @@
 !/requirements-dev.txt
 !/ruff.toml
 !/SECURITY.md
+!/start-service.cmd
 !/stealer/
 !/stealer/**
 # Cleaner output lands here; keep the folder, ignore what is in it.
