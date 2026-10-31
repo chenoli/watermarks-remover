@@ -63,6 +63,7 @@ from clean_audio import audio_purify, is_audio_format, is_audio_name, media_has_
 from clean_video import video_purify
 from common import (
     MAX_INPUT_BYTES,
+    docker_host_url,
     eprint,
     looks_binary,
     subprocess_creationflags,
@@ -995,7 +996,12 @@ def _apply_layer_b(text: str, strategy: str, options: dict[str, Any]) -> tuple[s
         if importlib.util.find_spec("transformers") is None:
             raise ValueError("Layer B 'mlm' step requires transformers")
     base_url = os.environ.get("WATERMARKS_REWRITE_BASE_URL")
-    if needs_llm and base_url:
+    # In the container a host-loopback URL is rewritten to the Docker host;
+    # that is still the user's own machine, not a remote endpoint.
+    on_docker_host = False
+    if base_url:
+        base_url, on_docker_host = docker_host_url(base_url)
+    if needs_llm and base_url and not on_docker_host:
         host = urlparse(base_url).hostname or ""
         allow_remote = os.environ.get("WATERMARKS_REWRITE_ALLOW_REMOTE", "").strip().lower() in (
             "1",
@@ -1011,7 +1017,7 @@ def _apply_layer_b(text: str, strategy: str, options: dict[str, Any]) -> tuple[s
     kwargs: dict[str, Any] = {
         "backend": backend,
         "model": os.environ.get("WATERMARKS_REWRITE_MODEL"),
-        "base_url": os.environ.get("WATERMARKS_REWRITE_BASE_URL"),
+        "base_url": base_url,
         "api_key": os.environ.get("WATERMARKS_REWRITE_API_KEY"),
         "temperature": float(os.environ.get("WATERMARKS_REWRITE_TEMPERATURE", "0.9")),
         # Per LLM call; slow local models (CPU / small GPUs) need more than 120 s.

@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from common import safe_write_text
+from common import docker_host_url, safe_write_text
 
 ROOT = Path(__file__).resolve().parents[2]
 EXIT_START_SERVICE = 10
@@ -94,6 +94,8 @@ MANAGED_KEYS = (
     "WATERMARKS_REWRITE_TEMPERATURE",
     "WATERMARKS_REWRITE_VERIFY",
     "WATERMARKS_CLEAN_STRATEGY",
+    # Docker only: build the image with torch/transformers for the mlm step.
+    "WATERMARKS_WITH_MLM",
 )
 
 MESSAGES: dict[str, dict[str, str]] = {
@@ -230,6 +232,7 @@ def build_env_updates(
             "WATERMARKS_REWRITE_TEMPERATURE": profile.temperature,
             "WATERMARKS_CLEAN_STRATEGY": profile.strategy,
             "WATERMARKS_REWRITE_VERIFY": "1" if profile.verify else None,
+            "WATERMARKS_WITH_MLM": "1" if "mlm@" in profile.strategy else None,
         }
     )
     if api_key:
@@ -259,7 +262,7 @@ def _get_json(url: str, api_key: str | None, timeout: float = 15) -> Any:
 
 
 def list_models(backend: str, base_url: str, api_key: str | None) -> list[str]:
-    base = base_url.rstrip("/")
+    base = docker_host_url(base_url)[0].rstrip("/")
     if backend == "ollama":
         data = _get_json(f"{base}/api/tags", None)
         return sorted(m["name"] for m in data.get("models", []))
@@ -275,7 +278,7 @@ def test_connection(
 
     _generate_once(
         backend,
-        base_url,
+        docker_host_url(base_url)[0],
         model,
         api_key,
         "Reply with the single word: OK",

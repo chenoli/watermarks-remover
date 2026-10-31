@@ -290,6 +290,8 @@ other line. Run it again any time to switch providers.
 Logs go to `logs/service.log` and `logs/service.err.log`. Options:
 `-Port 8800`, `-BindHost 0.0.0.0`.
 
+Prefer Docker? Double-click `start-docker.cmd` instead (see [One command on a new machine](#one-command-on-a-new-machine-windows)).
+
 See [docs/windows-autostart.md](docs/windows-autostart.md) for auto-starting the service at Windows login without Docker.
 
 For the whole infra (core + optional harness/heavy backends), see [Docker / compose](#docker--compose) below.
@@ -440,6 +442,32 @@ checkout directly. Like detection, generation is fail-soft: an unconfigured gene
 reports `{"ok": false, "error": ...}`.
 
 ## Docker / compose
+
+### One command on a new machine (Windows)
+
+Only [Docker Desktop](https://www.docker.com/products/docker-desktop/) is
+needed; no Python on the host.
+
+1. Install Docker Desktop and clone (or download) this repository.
+2. Double-click `start-docker.cmd` at the repo root.
+
+On first use it asks for the text rewrite provider, model, API key and profile
+(the same questions as `setup.cmd`, run inside a container and saved to
+`.env`). Then it builds and starts the `wr-core` container, waits for
+`/health`, and prints the URL (`http://127.0.0.1:8765`). Run it again any time:
+it starts Docker Desktop when the engine is down, stops a local `server.py`
+holding the port, and rebuilds only what changed.
+
+Inside the container a host-loopback provider URL (a local Ollama or LM Studio
+at `http://127.0.0.1:...`) is reached through `host.docker.internal`. The
+Aggressive profile sets `WATERMARKS_WITH_MLM=1`, so the image is built with
+torch + transformers and `roberta-large` is cached in the `core-hf-cache`
+volume. Other platforms run the same two steps by hand:
+
+```bash
+docker compose run --rm wr-setup     # first time: choose the provider (writes .env)
+docker compose up -d --build wr-core
+```
 
 Published images (GHCR):
 

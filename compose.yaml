@@ -1,5 +1,7 @@
 # Whole-infra bring-up for watermarks-remover.
 #
+#   start-docker.cmd                        # Windows: setup if needed + core, one command
+#   docker compose run --rm wr-setup        # choose the text rewrite provider (writes .env)
 #   docker compose up --build -d            # core HTTP service only
 #   docker compose --profile harness up --build -d   # + markllm / markdiffusion harnesses
 #   docker compose --profile heavy up --build -d     # + ctrlregen / synthid (local builds)
@@ -21,12 +23,32 @@ services:
     build:
       context: service
       dockerfile: Dockerfile
+      args:
+        # 1 = include torch/transformers for the `mlm` step (Aggressive profile).
+        WITH_MLM: ${WATERMARKS_WITH_MLM:-0}
     image: ghcr.io/guillaumemeyer/watermarks-remover:latest
     ports:
       - "127.0.0.1:8765:8765"
+    # A local Ollama / LM Studio on the host is reached through this name
+    # (Docker Desktop provides it; the mapping adds it on Linux engines).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # Empty by default (no auth). Set to require `Authorization: Bearer <key>`.
       WATERMARKS_SERVER_API_KEY: ${WATERMARKS_SERVER_API_KEY:-}
+      # Layer B text rewrite, as written by setup.cmd / `docker compose run --rm wr-setup`.
+      WATERMARKS_REWRITE_BACKEND: ${WATERMARKS_REWRITE_BACKEND:-}
+      WATERMARKS_REWRITE_MODEL: ${WATERMARKS_REWRITE_MODEL:-}
+      WATERMARKS_REWRITE_BASE_URL: ${WATERMARKS_REWRITE_BASE_URL:-}
+      WATERMARKS_REWRITE_API_KEY: ${WATERMARKS_REWRITE_API_KEY:-}
+      WATERMARKS_REWRITE_ALLOW_REMOTE: ${WATERMARKS_REWRITE_ALLOW_REMOTE:-}
+      WATERMARKS_REWRITE_REASONING_EFFORT: ${WATERMARKS_REWRITE_REASONING_EFFORT:-}
+      WATERMARKS_REWRITE_TEMPERATURE: ${WATERMARKS_REWRITE_TEMPERATURE:-0.3}
+      WATERMARKS_REWRITE_TIMEOUT: ${WATERMARKS_REWRITE_TIMEOUT:-300}
+      WATERMARKS_REWRITE_VERIFY: ${WATERMARKS_REWRITE_VERIFY:-1}
+      WATERMARKS_REWRITE_VERIFY_RETRIES: ${WATERMARKS_REWRITE_VERIFY_RETRIES:-2}
+      WATERMARKS_CLEAN_STRATEGY: ${WATERMARKS_CLEAN_STRATEGY:-paraphrase@0.8}
+      HF_TOKEN: ${HF_TOKEN:-}
       # Optional SynthID image scorer sidecar (heavy profile).
       WATERMARKS_SYNTHID_SCORER_URL: ${WATERMARKS_SYNTHID_SCORER_URL:-}
       WATERMARKS_SYNTHID_SCORER_API_KEY: ${WATERMARKS_SYNTHID_SCORER_API_KEY:-}
@@ -37,9 +59,35 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    volumes:
+      # roberta-large for the mlm step (writable; the root fs is read-only).
+      - core-hf-cache:/home/remover/.cache/huggingface
     init: true
     user: "10001:10001"
     restart: unless-stopped
+
+  # Interactive provider setup without Python on the host; writes ./.env:
+  #   docker compose run --rm wr-setup
+  wr-setup:
+    profiles: [setup]
+    image: ghcr.io/guillaumemeyer/watermarks-remover:latest
+    build:
+      context: service
+      dockerfile: Dockerfile
+      # Same args as wr-core: both share the image tag.
+      args:
+        WITH_MLM: ${WATERMARKS_WITH_MLM:-0}
+    entrypoint: ["python3", "/app/scripts/setup_wizard.py"]
+    command: ["--env-file", "/workspace/.env", "--no-start-prompt"]
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      WATERMARKS_LANG: ${WATERMARKS_LANG:-}
+    volumes:
+      - .:/workspace
+    init: true
 
   wr-markllm:
     profiles: [harness]
@@ -179,6 +227,7 @@ services:
       - synthid-cache:/home/scorer/.cache/huggingface
 
 volumes:
+  core-hf-cache:
   markllm-cache:
   bench-out:
   markdiffusion-cache:

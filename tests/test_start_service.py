@@ -10,16 +10,23 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-CMD = ROOT / "start-service.cmd"
 PS1 = ROOT / "service" / "scripts" / "start_service.ps1"
 REQUIREMENTS = ROOT / "service" / "requirements-local.txt"
 POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
 
 
-def test_cmd_runs_the_launcher_script():
-    text = CMD.read_text(encoding="utf-8")
-    assert r"%~dp0service\scripts\start_service.ps1" in text
-    assert PS1.is_file()
+@pytest.mark.parametrize(
+    ("cmd", "script"),
+    [
+        ("start-service.cmd", "start_service.ps1"),
+        ("start-docker.cmd", "start_docker.ps1"),
+        ("setup.cmd", "setup_wizard.py"),
+    ],
+)
+def test_cmd_runs_its_script(cmd, script):
+    text = (ROOT / cmd).read_text(encoding="utf-8")
+    assert rf"%~dp0service\scripts\{script}" in text
+    assert (ROOT / "service" / "scripts" / script).is_file()
 
 
 def test_local_requirements_are_exactly_pinned():
@@ -44,11 +51,13 @@ def test_default_strategy_needs_what_the_launcher_installs():
 
 
 @pytest.mark.skipif(POWERSHELL is None, reason="PowerShell not installed")
-def test_launcher_script_parses():
+@pytest.mark.parametrize("script", ["start_service.ps1", "start_docker.ps1", "launcher_common.ps1"])
+def test_launcher_scripts_parse(script):
+    path = ROOT / "service" / "scripts" / script
     probe = (
         "$errors = $null; "
         "[void][System.Management.Automation.Language.Parser]::ParseFile("
-        f"'{PS1}', [ref]$null, [ref]$errors); "
+        f"'{path}', [ref]$null, [ref]$errors); "
         "if ($errors.Count) { $errors | ForEach-Object { $_.Message }; exit 1 }"
     )
     res = subprocess.run(

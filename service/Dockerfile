@@ -23,6 +23,9 @@
 ARG C2PATOOL_VERSION=c2patool-v0.27.15
 ARG C2PATOOL_SHA256=7a035b727a6cdda8ad08d98fe94b3c20febee4aea4e7c1de02571b295730faf0
 ARG VERSION=dev
+# 1 = also install torch (CPU) + transformers for the Layer B `mlm` step
+# (setup.cmd's Aggressive profile; compose passes WATERMARKS_WITH_MLM).
+ARG WITH_MLM=0
 
 # python:3.14-slim linux/amd64 digest.
 FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
@@ -30,6 +33,7 @@ FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9
 ARG C2PATOOL_VERSION
 ARG C2PATOOL_SHA256
 ARG VERSION
+ARG WITH_MLM
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -61,14 +65,31 @@ RUN chmod -R a+rX /app/scripts
 
 RUN python3 -m pip install --no-cache-dir "pip==26.2.1"
 
+# Optional mlm extras, pinned in requirements-local.txt; torch comes from the
+# PyTorch CPU index (no CUDA download) and its +cpu build satisfies the pin.
+COPY requirements-local.txt /app/requirements-local.txt
+RUN if [ "$WITH_MLM" = "1" ]; then \
+        python3 -m pip install --no-cache-dir \
+            --index-url https://download.pytorch.org/whl/cpu \
+            "$(grep -E '^torch==' /app/requirements-local.txt)" \
+        && python3 -m pip install --no-cache-dir -r /app/requirements-local.txt; \
+    fi
+
 # Unprivileged runtime user. The service only reads request bodies and writes
 # to temp files / stdout, so nothing under /app needs root.
-RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin remover
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin remover \
+    && install -d -o remover -g remover /home/remover/.cache/huggingface
 USER remover
 
+# WATERMARKS_IN_DOCKER: host-loopback rewrite URLs (a local Ollama / LM
+# Studio) are reached through host.docker.internal. The default strategy is
+# setup.cmd's precise profile; compose overrides it from .env.
 ENV WATERMARKS_SERVER_VERSION=${VERSION} \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    WATERMARKS_IN_DOCKER=1 \
+    WATERMARKS_CLEAN_STRATEGY=paraphrase@0.8 \
+    HF_HOME=/home/remover/.cache/huggingface
 
 WORKDIR /app
 EXPOSE 8765

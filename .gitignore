@@ -39,6 +39,7 @@
 !/ruff.toml
 !/SECURITY.md
 !/setup.cmd
+!/start-docker.cmd
 !/start-service.cmd
 !/stealer/
 !/stealer/**

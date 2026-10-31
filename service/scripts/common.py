@@ -580,6 +580,25 @@ def which(cmd: str) -> str | None:
     return _which(cmd)
 
 
+def docker_host_url(url: str) -> tuple[str, bool]:
+    """Point a loopback URL at the Docker host when running in the container.
+
+    Inside the image (WATERMARKS_IN_DOCKER=1) 127.0.0.1 is the container
+    itself, so a local Ollama / LM Studio configured as http://127.0.0.1:...
+    on the host is reached through host.docker.internal instead. Returns the
+    URL to use and whether it was rewritten.
+    """
+    from urllib.parse import urlparse
+
+    if os.environ.get("WATERMARKS_IN_DOCKER") != "1":
+        return url, False
+    parts = urlparse(url)
+    if parts.hostname not in ("127.0.0.1", "localhost", "::1"):
+        return url, False
+    netloc = "host.docker.internal" + (f":{parts.port}" if parts.port else "")
+    return parts._replace(netloc=netloc).geturl(), True
+
+
 def safe_arg(path: str) -> str:
     """Guard paths passed to option-parsing CLIs (exiftool, c2patool).
 

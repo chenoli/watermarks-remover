@@ -27,34 +27,7 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $Root
 
-function Write-Step([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
-
-function Stop-WithError([string]$Message) {
-    Write-Host "ERROR: $Message" -ForegroundColor Red
-    exit 1
-}
-
-function Invoke-Checked([string]$Exe, [string[]]$ArgList) {
-    & $Exe @ArgList
-    if ($LASTEXITCODE -ne 0) { Stop-WithError "'$Exe $($ArgList -join ' ')' failed (exit $LASTEXITCODE)" }
-}
-
-function Test-Native([string]$Exe, [string[]]$ArgList) {
-    # Windows PowerShell turns redirected native stderr into errors under
-    # "Stop"; a probe must only look at the exit code.
-    $ErrorActionPreference = "Continue"
-    & $Exe @ArgList 2>$null | Out-Null
-    return ($LASTEXITCODE -eq 0)
-}
-
-function Test-Url([string]$Url, [hashtable]$Headers = @{}) {
-    try {
-        $null = Invoke-WebRequest -Uri $Url -Headers $Headers -UseBasicParsing -TimeoutSec 3
-        return $true
-    } catch {
-        return $false
-    }
-}
+. (Join-Path $PSScriptRoot "launcher_common.ps1")
 
 # --- 1. Python venv ----------------------------------------------------------
 $Py = Join-Path $Root ".venv\Scripts\python.exe"
@@ -70,21 +43,6 @@ if (-not (Test-Path $Py)) {
 }
 
 # --- 2. .env + rewrite provider ---------------------------------------------
-function Import-DotEnv([string]$Path) {
-    foreach ($line in Get-Content $Path -Encoding UTF8) {
-        $text = $line.Trim()
-        if ($text -eq "" -or $text.StartsWith("#")) { continue }
-        $eq = $text.IndexOf("=")
-        if ($eq -lt 1) { continue }
-        $key = $text.Substring(0, $eq).Trim()
-        $value = $text.Substring($eq + 1).Trim()
-        if ($value.Length -ge 2 -and $value[0] -eq $value[-1] -and ($value[0] -eq '"' -or $value[0] -eq "'")) {
-            $value = $value.Substring(1, $value.Length - 2)
-        }
-        [Environment]::SetEnvironmentVariable($key, $value, "Process")
-    }
-}
-
 $EnvFile = Join-Path $Root ".env"
 if (Test-Path $EnvFile) {
     Write-Step "Loading .env"
@@ -181,26 +139,7 @@ if ($env:WATERMARKS_REWRITE_BACKEND -eq "ollama") {
 }
 
 # --- 5. (Re)start the server ------------------------------------------------
-# Re-query every pass: several old servers can share the port (e.g. one
-# started via the py launcher and one via python3), and a single snapshot
-# does not always list all of them.
-$deadline = (Get-Date).AddSeconds(15)
-while ($true) {
-    $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)
-    if ($listeners.Count -eq 0) { break }
-    foreach ($procId in $listeners) {
-        $proc = Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -eq $procId }
-        if (-not $proc) { continue }
-        if ($proc.CommandLine -match "server\.py") {
-            Write-Step "Stopping the old server (PID $procId)"
-            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
-        } else {
-            Stop-WithError "Port $Port is used by another program ($($proc.Name), PID $procId). Close it or pass -Port."
-        }
-    }
-    if ((Get-Date) -gt $deadline) { Stop-WithError "Port $Port is still busy (PIDs: $($listeners -join ', '))." }
-    Start-Sleep -Milliseconds 500
-}
+Stop-PortListeners $Port
 
 $LogDir = Join-Path $Root "logs"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -211,8 +150,7 @@ $server = Start-Process -FilePath $Py -ArgumentList @("service\scripts\server.py
     -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $Log -RedirectStandardError $ErrLog -PassThru
 
 # --- 6. Wait for /health ----------------------------------------------------
-$headers = @{}
-if ($env:WATERMARKS_SERVER_API_KEY) { $headers["Authorization"] = "Bearer $($env:WATERMARKS_SERVER_API_KEY)" }
+$headers = Get-HealthHeaders
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 while (-not (Test-Url "http://${BindHost}:$Port/health" $headers)) {
     if ($server.HasExited) {
