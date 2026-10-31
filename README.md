@@ -248,21 +248,38 @@ python3 service/scripts/server.py --host 127.0.0.1 --port 8765
 
 ### Windows (no Docker)
 
-**One command:** double-click `start-service.cmd` at the repo root (or run
-`.\start-service.cmd`). It sets up everything the default text clean needs and
-is safe to run again at any time:
+**Choose a rewrite provider:** double-click `setup.cmd` at the repo root. It
+asks, one step at a time, for:
 
-1. creates `.venv` and installs the `mlm` extras (`service/requirements-local.txt`:
-   CPU-only torch + transformers), only when missing;
-2. loads `.env` into the server's environment (with no `.env`, the rewrite
-   backend defaults to local Ollama with `qwen2.5:7b`);
-3. for the `ollama` backend, starts Ollama if it is not answering and pulls the
+1. the provider: DeepSeek, OpenAI, OpenRouter, Groq (online), Ollama or
+   LM Studio (local), or any other OpenAI-compatible API;
+2. the model, listed from the provider's own API;
+3. the API key, typed hidden (Enter keeps the saved key; never echoed or logged);
+4. the rewrite profile:
+
+   | Profile | Strategy | Notes |
+   | --- | --- | --- |
+   | Precise (default) | `paraphrase@0.8`, temperature 0.3 | best for keeping meaning and grammar |
+   | Balanced | `paraphrase@0.8,humanize@0.5`, temperature 0.5 | two LLM passes |
+   | Aggressive | `paraphrase@0.8,mlm@0.2`, temperature 0.9 | `mlm` (roberta-large) is English-only |
+
+It tests the connection with one tiny call and then updates only its own keys
+in `.env` (`WATERMARKS_REWRITE_*`, `WATERMARKS_CLEAN_STRATEGY`), keeping every
+other line. Run it again any time to switch providers.
+
+**Start the service:** double-click `start-service.cmd` (or run
+`.\start-service.cmd`). It is safe to run again at any time:
+
+1. creates `.venv`;
+2. loads `.env`; with no provider configured yet it runs the setup first;
+3. only when the strategy has an `mlm` step: installs CPU-only torch +
+   transformers (`service/requirements-local.txt`) and pre-downloads
+   `roberta-large`;
+4. for the `ollama` backend, starts Ollama if it is not answering and pulls the
    model if it is missing (install Ollama from <https://ollama.com/download>);
-4. pre-downloads `roberta-large` so the first `/clean` does not time out;
 5. restarts any `server.py` already on port 8765 and waits for `/health`.
 
-Logs go to `logs/service.log` and `logs/service.err.log`. The first run
-downloads a few GB (torch, roberta-large, the Ollama model). Options:
+Logs go to `logs/service.log` and `logs/service.err.log`. Options:
 `-Port 8800`, `-BindHost 0.0.0.0`.
 
 See [docs/windows-autostart.md](docs/windows-autostart.md) for auto-starting the service at Windows login without Docker.
@@ -508,11 +525,13 @@ set -a; . ./.env; set +a; python3 service/scripts/rewrite_text.py /tmp/x.txt -o 
 | `WATERMARKS_REWRITE_ALLOW_REMOTE` | `rewrite_text.py` hook | `1` to allow non-loopback endpoints |
 | `WATERMARKS_REWRITE_REASONING_EFFORT` | `rewrite_text.py` hook | `none` (default) / `low` / `medium` / `high` / `off` |
 | `WATERMARKS_REWRITE_TIMEOUT` | `/clean` Layer B (server) | Seconds per rewrite call (default 120; `start-service.cmd` uses 900) |
+| `WATERMARKS_CLEAN_STRATEGY` | `server.py` `/clean` | Default Layer B strategy string; overrides the config file (written by `setup.cmd`) |
+| `WATERMARKS_REWRITE_TEMPERATURE` | `/clean` Layer B (server) | Sampling temperature for rewrite calls (default 0.9; `setup.cmd` profiles use 0.3 / 0.5 / 0.9) |
 | `WATERMARKS_CLEAN_STRATEGY_FILE` | `server.py` `/clean` | Path to the Layer B strategy config JSON (default `config/clean_strategy.json`) |
 | `WATERMARKS_GUMBEL_KEY` | `detect_gumbel.py` / `text_detectors.py` | Secret key for keyed-Gumbel (EXP) same-key replay (e.g. `0x…`); preferred over argv — never logged |
 
 **Layer B is required for text cleaning.** `/clean` always applies the default
-strategy (from `config/clean_strategy.json`, `{"default_strategy": "paraphrase@0.8,mlm@0.2"}`) to a text file after Layer A, unless the request passes its own `"strategy"` option (an ordered `tactic@intensity` list). A strategy step is `tactic@intensity`; the `mlm` step needs `transformers` + `roberta-large`, and any LLM step (`paraphrase`, `humanize`, …) needs the `WATERMARKS_REWRITE_*` config. If the required backend/model isn't configured — or no strategy is available — `/clean` **rejects the request with a 400**. Precedence for the config path: `--strategy-config` CLI flag > `WATERMARKS_CLEAN_STRATEGY_FILE` env var > the default `config/clean_strategy.json`.
+strategy (from `config/clean_strategy.json`, `{"default_strategy": "paraphrase@0.8,mlm@0.2"}`) to a text file after Layer A, unless the request passes its own `"strategy"` option (an ordered `tactic@intensity` list). A strategy step is `tactic@intensity`; the `mlm` step needs `transformers` + `roberta-large`, and any LLM step (`paraphrase`, `humanize`, …) needs the `WATERMARKS_REWRITE_*` config. If the required backend/model isn't configured — or no strategy is available — `/clean` **rejects the request with a 400**. Precedence for the config path: `--strategy-config` CLI flag > `WATERMARKS_CLEAN_STRATEGY_FILE` env var > the default `config/clean_strategy.json`. A non-empty `WATERMARKS_CLEAN_STRATEGY` env var replaces the file's strategy altogether.
 
 Images publish automatically on `v*` tags via [`.github/workflows/release-images.yml`](.github/workflows/release-images.yml).
 

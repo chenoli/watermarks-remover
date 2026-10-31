@@ -948,6 +948,20 @@ def _load_default_strategy(config_path: Path) -> str | None:
     return spec
 
 
+def _resolve_default_strategy(config_path: Path) -> str | None:
+    """WATERMARKS_CLEAN_STRATEGY (written by setup.cmd) wins over the config file."""
+    spec = os.environ.get("WATERMARKS_CLEAN_STRATEGY", "").strip()
+    if not spec:
+        return _load_default_strategy(config_path)
+    from rewrite_text import parse_strategy
+
+    try:
+        parse_strategy(spec)
+    except ValueError as e:
+        raise SystemExit(f"invalid WATERMARKS_CLEAN_STRATEGY {spec!r}: {e}") from e
+    return spec
+
+
 def _apply_layer_b(text: str, strategy: str, options: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Apply a Layer B rewrite strategy to *text*, rejecting if unavailable.
 
@@ -1668,7 +1682,7 @@ def main() -> int:
 
     API_KEY = args.api_key
     global _DEFAULT_STRATEGY  # noqa: PLW0603 — loaded once at startup
-    _DEFAULT_STRATEGY = _load_default_strategy(Path(args.strategy_config))
+    _DEFAULT_STRATEGY = _resolve_default_strategy(Path(args.strategy_config))
 
     if args.host not in ("127.0.0.1", "localhost", "::1"):
         eprint(f"warning: binding {args.host} — intended for a trusted network only")

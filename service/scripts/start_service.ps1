@@ -5,11 +5,13 @@ Start the watermarks-remover service locally with everything Layer B needs.
 .DESCRIPTION
 One command, safe to re-run at any time (it only installs or downloads what
 is missing). Run it through start-service.cmd at the repo root. Steps:
-  1. create .venv and install the mlm extras (torch CPU + transformers)
-  2. load .env into this process; the server inherits it
-  3. ollama backend: start `ollama serve` if it is not answering and pull
+  1. create .venv
+  2. load .env; with no rewrite provider configured yet, run the setup
+     wizard (setup_wizard.py) first
+  3. only when the strategy has an mlm step: install torch CPU +
+     transformers and pre-download roberta-large
+  4. ollama backend: start `ollama serve` if it is not answering and pull
      the configured model if it is missing
-  4. pre-download roberta-large so the first /clean does not time out
   5. stop any server.py already listening on the port, start a fresh one
      (log: logs/service.log)
   6. wait for /health
@@ -54,7 +56,7 @@ function Test-Url([string]$Url, [hashtable]$Headers = @{}) {
     }
 }
 
-# --- 1. Python venv + mlm extras ------------------------------------------
+# --- 1. Python venv ----------------------------------------------------------
 $Py = Join-Path $Root ".venv\Scripts\python.exe"
 if (-not (Test-Path $Py)) {
     Write-Step "Creating .venv"
@@ -67,22 +69,9 @@ if (-not (Test-Path $Py)) {
     }
 }
 
-$Requirements = Join-Path $Root "service\requirements-local.txt"
-if (Test-Native $Py @("-c", "import torch, transformers, huggingface_hub")) {
-    Write-Step "Python dependencies already installed"
-} else {
-    Write-Step "Installing Python dependencies (first run downloads about 1 GB)"
-    $torchPin = (Select-String -Path $Requirements -Pattern '^torch==\S+$').Line
-    if (-not $torchPin) { Stop-WithError "No torch pin in $Requirements" }
-    Invoke-Checked $Py @("-m", "pip", "install", "--disable-pip-version-check", "--index-url", "https://download.pytorch.org/whl/cpu", $torchPin)
-    Invoke-Checked $Py @("-m", "pip", "install", "--disable-pip-version-check", "-r", $Requirements)
-}
-
-# --- 2. .env ----------------------------------------------------------------
-$EnvFile = Join-Path $Root ".env"
-if (Test-Path $EnvFile) {
-    Write-Step "Loading .env"
-    foreach ($line in Get-Content $EnvFile -Encoding UTF8) {
+# --- 2. .env + rewrite provider ---------------------------------------------
+function Import-DotEnv([string]$Path) {
+    foreach ($line in Get-Content $Path -Encoding UTF8) {
         $text = $line.Trim()
         if ($text -eq "" -or $text.StartsWith("#")) { continue }
         $eq = $text.IndexOf("=")
@@ -94,22 +83,52 @@ if (Test-Path $EnvFile) {
         }
         [Environment]::SetEnvironmentVariable($key, $value, "Process")
     }
-} else {
-    Write-Step "No .env found; using the local Ollama defaults"
 }
 
-# A fresh clone has no rewrite backend configured; default to local Ollama so
-# Layer B works out of the box once Ollama is installed.
-if (-not $env:WATERMARKS_REWRITE_BACKEND) {
-    $env:WATERMARKS_REWRITE_BACKEND = "ollama"
-    if (-not $env:WATERMARKS_REWRITE_MODEL) { $env:WATERMARKS_REWRITE_MODEL = "qwen2.5:7b" }
-    if (-not $env:WATERMARKS_REWRITE_BASE_URL) { $env:WATERMARKS_REWRITE_BASE_URL = "http://127.0.0.1:11434" }
+$EnvFile = Join-Path $Root ".env"
+if (Test-Path $EnvFile) {
+    Write-Step "Loading .env"
+    Import-DotEnv $EnvFile
 }
+
+if (-not $env:WATERMARKS_REWRITE_BACKEND) {
+    Write-Step "No rewrite provider configured yet; starting the setup"
+    & $Py (Join-Path $Root "service\scripts\setup_wizard.py") --no-start-prompt
+    if ($LASTEXITCODE -ne 0) { Stop-WithError "Setup was not completed. Run setup.cmd to choose a provider." }
+    Import-DotEnv $EnvFile
+}
+
+$Strategy = $env:WATERMARKS_CLEAN_STRATEGY
+if (-not $Strategy) {
+    $Strategy = (Get-Content (Join-Path $Root "config\clean_strategy.json") -Raw | ConvertFrom-Json).default_strategy
+}
+$NeedsMlm = $Strategy -match '(^|,)\s*mlm@'
+Write-Step "Layer B: $($env:WATERMARKS_REWRITE_BACKEND) / $($env:WATERMARKS_REWRITE_MODEL), strategy $Strategy"
 
 # Local models on modest hardware can take minutes per rewrite call.
 if (-not $env:WATERMARKS_REWRITE_TIMEOUT) { $env:WATERMARKS_REWRITE_TIMEOUT = "900" }
 
-# --- 3. Ollama --------------------------------------------------------------
+# --- 3. mlm extras (only when the strategy has an mlm step) ------------------
+if ($NeedsMlm) {
+    $Requirements = Join-Path $Root "service\requirements-local.txt"
+    if (Test-Native $Py @("-c", "import torch, transformers, huggingface_hub")) {
+        Write-Step "mlm dependencies already installed"
+    } else {
+        Write-Step "Installing the mlm dependencies (first run downloads about 1 GB)"
+        $torchPin = (Select-String -Path $Requirements -Pattern '^torch==\S+$').Line
+        if (-not $torchPin) { Stop-WithError "No torch pin in $Requirements" }
+        Invoke-Checked $Py @("-m", "pip", "install", "--disable-pip-version-check", "--index-url", "https://download.pytorch.org/whl/cpu", $torchPin)
+        Invoke-Checked $Py @("-m", "pip", "install", "--disable-pip-version-check", "-r", $Requirements)
+    }
+    # Same Hub id as rewrite_text._MLM_MODEL, so the server finds it in the cache.
+    Write-Step "Checking the roberta-large model (one-time download, about 1.4 GB)"
+    $fetch = "from huggingface_hub import snapshot_download; snapshot_download('FacebookAI/roberta-large', allow_patterns=['*.json', '*.txt', 'model.safetensors'])"
+    Invoke-Checked $Py @("-c", $fetch)
+} else {
+    Write-Step "Strategy has no mlm step; skipping torch/transformers"
+}
+
+# --- 4. Ollama --------------------------------------------------------------
 if ($env:WATERMARKS_REWRITE_BACKEND -eq "ollama") {
     $ollamaUrl = $env:WATERMARKS_REWRITE_BASE_URL
     if (-not $ollamaUrl) { $ollamaUrl = "http://127.0.0.1:11434" }
@@ -160,12 +179,6 @@ if ($env:WATERMARKS_REWRITE_BACKEND -eq "ollama") {
         }
     }
 }
-
-# --- 4. roberta-large (mlm step) -------------------------------------------
-# Same Hub id as rewrite_text._MLM_MODEL, so the server finds it in the cache.
-Write-Step "Checking the roberta-large model (one-time download, about 1.4 GB)"
-$fetch = "from huggingface_hub import snapshot_download; snapshot_download('FacebookAI/roberta-large', allow_patterns=['*.json', '*.txt', 'model.safetensors'])"
-Invoke-Checked $Py @("-c", $fetch)
 
 # --- 5. (Re)start the server ------------------------------------------------
 # Re-query every pass: several old servers can share the port (e.g. one

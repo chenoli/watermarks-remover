@@ -883,12 +883,9 @@ def rewrite(
         loop_passed = False
         for _ in range(n_cands):
             cand = _generate_candidate()
-            if tactic == "humanize":
-                cand = humanize_pass(cand)
-            else:
-                # Em dashes are an AI tell on their own; strip them regardless
-                # of tactic, even though only `humanize` runs the full pass.
-                cand = strip_dashes(cand)
+            # Em dashes are an AI tell on their own; strip them regardless of
+            # tactic, even though only `humanize` runs the full pass.
+            cand = humanize_pass(cand) if tactic == "humanize" else strip_dashes(cand)
             cand_stats: dict | None = None
             if layer_a_after:
                 cand, cand_stats = clean_text(cand)
