@@ -84,14 +84,29 @@ _FIDELITY = (
     "grammatically correct and natural in its language. "
 )
 
+# Part of every token-churning rewrite prompt: churn must never cost
+# naturalness. A synonym nobody would say ("Be truthful" for "Be honest") is
+# worse than keeping the original word.
+_NATURAL = (
+    "Every change must sound like something a native speaker would actually write "
+    "in this context: only replace a word when the replacement is just as idiomatic "
+    "and common there, otherwise keep the original word. Keep idioms, fixed "
+    'expressions, and set phrases as they are (e.g. "to be fair", "on the same page", '
+    '"dar um jeito"). Keep the register and the author\'s voice: casual stays '
+    'casual, slang and contractions stay (e.g. pt-BR "pra" stays "pra"), and nothing '
+    "becomes more formal or more literary. Prefer structural changes (clause order, "
+    "merging or splitting sentences, different connectors) over synonym swaps. "
+)
+
 PROMPTS = {
     "paraphrase": (
         "Rewrite the following text so that it uses substantially different wording at "
         "the token level. Change clause order, connectors, and transition words; vary "
-        "sentence boundaries and length; and replace both content words and function "
-        "words where meaning allows. Do not use em dashes; use a comma, period, or "
-        "parentheses instead. Preserve all facts, numbers, names, and technical "
-        "identifiers. Do not add or remove claims. "
+        "sentence boundaries and length; and replace content words and function words "
+        "where meaning allows and the result stays natural. Do not use em dashes; use "
+        "a comma, period, or parentheses instead. Preserve all facts, numbers, names, "
+        "and technical identifiers. Do not add or remove claims. "
+        + _NATURAL
         + _FIDELITY
         + "Output only the rewritten text.\n\n---\n{TEXT}"
     ),
@@ -108,7 +123,9 @@ PROMPTS = {
         'Avoid AI vocabulary ("additionally", "delve", "crucial", "foster", '
         '"leverage", "utilize", "interplay", and abstract "landscape"). Do not add '
         "em dashes, bold text, emojis, or curly quotes. Preserve all facts, numbers, "
-        "names, and technical identifiers. Do not add or remove claims. "
+        "names, and technical identifiers. Do not add or remove claims. Keep the "
+        "author's register and voice (casual stays casual, slang and contractions "
+        "stay) and keep idioms and set phrases. "
         + _FIDELITY
         + "Output only the rewritten text.\n\n---\n{TEXT}"
     ),
@@ -146,6 +163,7 @@ PROMPTS = {
         "at the token level. Do not use em dashes; use a comma, period, or "
         "parentheses instead. Preserve all facts, numbers, names, and technical "
         "identifiers. Do not add or remove claims. "
+        + _NATURAL
         + _FIDELITY
         + "Output only the rewritten text.\n\n---\n{TEXT}"
     ),
@@ -156,6 +174,7 @@ PROMPTS = {
         "non-essential content words. Do not use em dashes; use a comma, period, "
         "or parentheses instead. Preserve all facts, numbers, names, and "
         "technical identifiers. Do not add or remove claims. "
+        + _NATURAL
         + _FIDELITY
         + "Output only the rewritten fragment.\n\n---\n{TEXT}"
     ),
@@ -359,7 +378,10 @@ def _intensity_clause(level: float) -> str:
         "changing only function words and a few non-essential content words; at high "
         "intensity change wording substantially at the token level. Preserve all facts, "
         "numbers, names, and technical identifiers. Do not add or remove claims. "
-        "Never translate any part, keep the meaning identical, and keep the grammar correct."
+        "Never translate any part, keep the meaning identical, and keep the grammar correct. "
+        "A higher intensity never justifies an unnatural word: keep idioms, set phrases, "
+        "and the original register, and reach the target through structure rather than "
+        "uncommon synonyms."
     )
 
 
@@ -1202,13 +1224,20 @@ def apply_strategy(
 
 # --- fidelity check -----------------------------------------------------------
 
-FIDELITY_CHECKS = ("same_meaning", "facts_preserved", "same_languages", "grammar_ok")
+FIDELITY_CHECKS = (
+    "same_meaning",
+    "facts_preserved",
+    "same_languages",
+    "grammar_ok",
+    "natural_ok",
+)
 
 VERIFY_PROMPT = (
     "You check a rewrite for fidelity. Compare ORIGINAL and REWRITE and answer with "
     "a single JSON object and nothing else:\n"
     '{"same_meaning": true|false, "facts_preserved": true|false, '
-    '"same_languages": true|false, "grammar_ok": true|false, "issues": ["..."]}\n'
+    '"same_languages": true|false, "grammar_ok": true|false, "natural_ok": true|false, '
+    '"issues": ["..."]}\n'
     "- same_meaning: every claim, its tone, and its intent are unchanged; nothing "
     "added, removed, softened, or strengthened.\n"
     "- facts_preserved: numbers, names, versions, technical identifiers, code, URLs, "
@@ -1218,6 +1247,12 @@ VERIFY_PROMPT = (
     "merged).\n"
     "- grammar_ok: the rewrite is grammatically correct and natural in its "
     "language(s).\n"
+    "- natural_ok: a native speaker would write every changed phrase this way in "
+    'this context. Fail it for a synonym nobody uses there (e.g. "to be just" for '
+    '"to be fair", "on the identical page" for "on the same page"), a broken idiom or set '
+    "phrase, or a shift in register (casual turned formal, slang or contractions "
+    'such as pt-BR "pra" expanded, plain words made literary). Quote each such '
+    "phrase in issues.\n"
     "Different wording alone is not an issue; that is the goal of the rewrite. List "
     "each concrete problem in issues (empty list when all checks pass).\n\n"
     "ORIGINAL:\n<<<\n{ORIGINAL}\n>>>\n\nREWRITE:\n<<<\n{REWRITE}\n>>>"

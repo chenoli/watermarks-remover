@@ -22,6 +22,7 @@ PASS = json.dumps(
         "facts_preserved": True,
         "same_languages": True,
         "grammar_ok": True,
+        "natural_ok": True,
         "issues": [],
     }
 )
@@ -31,6 +32,7 @@ FAIL = json.dumps(
         "facts_preserved": True,
         "same_languages": False,
         "grammar_ok": True,
+        "natural_ok": True,
         "issues": ["EN section translated to Portuguese"],
     }
 )
@@ -60,6 +62,34 @@ def test_intensity_clause_repeats_the_fidelity_rule_after_the_text():
     assert prompt.rindex("Never translate") > prompt.index("HELLO")
 
 
+@pytest.mark.parametrize("tactic", ["paraphrase", "level", "chunk_unit"])
+def test_churn_prompts_demand_natural_idiomatic_wording(tactic):
+    prompt = PROMPTS[tactic]
+    assert prompt.index("native speaker") < prompt.index("{TEXT}")
+    for phrase in ("idioms", "register", '"pra" stays "pra"', "over synonym swaps"):
+        assert phrase in prompt
+
+
+def test_humanize_keeps_register_and_idioms():
+    prompt = PROMPTS["humanize"]
+    assert "register and voice" in prompt
+    assert "idioms and set phrases" in prompt
+
+
+def test_intensity_clause_forbids_unnatural_words_at_high_levels():
+    prompt = build_prompt("paraphrase", "HELLO", rewrite_level=0.9)
+    tail = prompt[prompt.index("HELLO") :]
+    assert "never justifies an unnatural word" in tail
+
+
+def test_verify_prompt_asks_for_natural_ok_with_examples():
+    from rewrite_text import FIDELITY_CHECKS, VERIFY_PROMPT
+
+    assert "natural_ok" in FIDELITY_CHECKS
+    assert '"natural_ok": true|false' in VERIFY_PROMPT
+    assert "to be just" in VERIFY_PROMPT
+
+
 # --- verdict parsing --------------------------------------------------------------
 
 
@@ -80,6 +110,22 @@ def test_parse_verdict_garbage_fails_closed(raw):
     verdict = parse_verdict(raw)
     assert verdict["passed"] is False
     assert verdict["issues"]
+
+
+def test_parse_verdict_unnatural_rewrite_fails():
+    data = json.loads(PASS)
+    data["natural_ok"] = False
+    data["issues"] = ['"Be truthful" is not idiomatic for "Be honest"']
+    verdict = parse_verdict(json.dumps(data))
+    assert verdict["passed"] is False
+    assert verdict["natural_ok"] is False
+    assert verdict["issues"]
+
+
+def test_parse_verdict_missing_natural_ok_fails_closed():
+    data = json.loads(PASS)
+    del data["natural_ok"]
+    assert parse_verdict(json.dumps(data))["passed"] is False
 
 
 def test_parse_verdict_requires_real_booleans():

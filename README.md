@@ -265,7 +265,8 @@ asks, one step at a time, for:
 
    **Fidelity check:** after the rewrite, a second call to the same model
    compares original and rewrite (same meaning, facts preserved, every section
-   still in its own language, correct grammar). A failed rewrite is redone from
+   still in its own language, correct grammar, natural wording that keeps
+   idioms and the original register). A failed rewrite is redone from
    the original, up to `WATERMARKS_REWRITE_VERIFY_RETRIES` more times; if none
    passes, `/clean` returns 400 instead of a text whose meaning changed. The
    verdicts are in `report.layer_b.verification`. It costs one extra LLM call
@@ -561,7 +562,7 @@ set -a; . ./.env; set +a; python3 service/scripts/rewrite_text.py /tmp/x.txt -o 
 | `WATERMARKS_REWRITE_ALLOW_REMOTE` | `rewrite_text.py` hook | `1` to allow non-loopback endpoints |
 | `WATERMARKS_REWRITE_REASONING_EFFORT` | `rewrite_text.py` hook | `none` (default) / `low` / `medium` / `high` / `off` |
 | `WATERMARKS_REWRITE_TIMEOUT` | `/clean` Layer B (server) | Seconds per rewrite call (default 120; `start-service.cmd` uses 900) |
-| `WATERMARKS_REWRITE_VERIFY` | `/clean` Layer B (server) | `1` = judge every rewrite for meaning, facts, languages and grammar; retry or reject on failure |
+| `WATERMARKS_REWRITE_VERIFY` | `/clean` Layer B (server) | `1` = judge every rewrite for meaning, facts, languages, grammar and naturalness; retry or reject on failure |
 | `WATERMARKS_REWRITE_VERIFY_RETRIES` | `/clean` Layer B (server) | Extra rewrite attempts after a failed fidelity check (default 2) |
 | `WATERMARKS_CLEAN_STRATEGY` | `server.py` `/clean` | Default Layer B strategy string; overrides the config file (written by `setup.cmd`) |
 | `WATERMARKS_REWRITE_TEMPERATURE` | `/clean` Layer B (server) | Sampling temperature for rewrite calls (default 0.9; `setup.cmd` profiles use 0.3 / 0.5 / 0.9) |

@@ -87,7 +87,7 @@ def test_build_prompt_level_alone_keeps_generic_prompt():
     # A bare intensity (no tactic) still yields the generic level-only prompt.
     p = build_prompt(None, "Hello 42.", lang="French", original_lang="English", rewrite_level=0.3)
     assert "0.30" in p
-    assert "clause order" not in p
+    assert "Change clause order, connectors" not in p
 
 
 def test_build_prompt_style_appended_to_humanize():
