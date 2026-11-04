@@ -61,7 +61,12 @@ if (-not $Strategy) {
     $Strategy = (Get-Content (Join-Path $Root "config\clean_strategy.json") -Raw | ConvertFrom-Json).default_strategy
 }
 $NeedsMlm = $Strategy -match '(^|,)\s*mlm@'
-Write-Step "Layer B: $($env:WATERMARKS_REWRITE_BACKEND) / $($env:WATERMARKS_REWRITE_MODEL), strategy $Strategy"
+$NoRewrite = "$Strategy".Trim() -ieq "none"
+if ($NoRewrite) {
+    Write-Step "Layer B off (strategy none): wording is kept, only invisible marks are removed"
+} else {
+    Write-Step "Layer B: $($env:WATERMARKS_REWRITE_BACKEND) / $($env:WATERMARKS_REWRITE_MODEL), strategy $Strategy"
+}
 
 # Local models on modest hardware can take minutes per rewrite call.
 if (-not $env:WATERMARKS_REWRITE_TIMEOUT) { $env:WATERMARKS_REWRITE_TIMEOUT = "900" }
@@ -163,6 +168,10 @@ while (-not (Test-Url "http://${BindHost}:$Port/health" $headers)) {
 
 Write-Host ""
 Write-Host "Service ready at http://${BindHost}:$Port (PID $($server.Id))" -ForegroundColor Green
-Write-Host "  Layer B backend: $($env:WATERMARKS_REWRITE_BACKEND) / $($env:WATERMARKS_REWRITE_MODEL)"
+if ($NoRewrite) {
+    Write-Host "  Layer B: off (strategy none)"
+} else {
+    Write-Host "  Layer B backend: $($env:WATERMARKS_REWRITE_BACKEND) / $($env:WATERMARKS_REWRITE_MODEL)"
+}
 if ($env:WATERMARKS_SERVER_API_KEY) { Write-Host "  API key required: send 'Authorization: Bearer <WATERMARKS_SERVER_API_KEY from .env>'" }
 Write-Host "  Logs: $Log, $ErrLog"

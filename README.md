@@ -262,6 +262,7 @@ asks, one step at a time, for:
    | Precise (default) | `paraphrase@0.8`, temperature 0.3 | yes | best for keeping meaning and grammar |
    | Balanced | `paraphrase@0.8,humanize@0.5`, temperature 0.5 | yes | two LLM passes |
    | Aggressive | `paraphrase@0.8,mlm@0.2`, temperature 0.9 | no | `mlm` (roberta-large) is English-only |
+   | Preserve text | `none` | n/a | no rewrite: only invisible marks are removed and the wording stays identical; statistical watermarks are not treated (a request can still pass `options.strategy`) |
 
    **Fidelity check:** after the rewrite, a second call to the same model
    compares original and rewrite (same meaning, facts preserved, every section
@@ -564,13 +565,13 @@ set -a; . ./.env; set +a; python3 service/scripts/rewrite_text.py /tmp/x.txt -o 
 | `WATERMARKS_REWRITE_TIMEOUT` | `/clean` Layer B (server) | Seconds per rewrite call (default 120; `start-service.cmd` uses 900) |
 | `WATERMARKS_REWRITE_VERIFY` | `/clean` Layer B (server) | `1` = judge every rewrite for meaning, facts, languages, grammar and naturalness; retry or reject on failure |
 | `WATERMARKS_REWRITE_VERIFY_RETRIES` | `/clean` Layer B (server) | Extra rewrite attempts after a failed fidelity check (default 2) |
-| `WATERMARKS_CLEAN_STRATEGY` | `server.py` `/clean` | Default Layer B strategy string; overrides the config file (written by `setup.cmd`) |
+| `WATERMARKS_CLEAN_STRATEGY` | `server.py` `/clean` | Default Layer B strategy string; overrides the config file (written by `setup.cmd`); `none` = Layer A only, no rewrite |
 | `WATERMARKS_REWRITE_TEMPERATURE` | `/clean` Layer B (server) | Sampling temperature for rewrite calls (default 0.9; `setup.cmd` profiles use 0.3 / 0.5 / 0.9) |
 | `WATERMARKS_CLEAN_STRATEGY_FILE` | `server.py` `/clean` | Path to the Layer B strategy config JSON (default `config/clean_strategy.json`) |
 | `WATERMARKS_GUMBEL_KEY` | `detect_gumbel.py` / `text_detectors.py` | Secret key for keyed-Gumbel (EXP) same-key replay (e.g. `0x…`); preferred over argv — never logged |
 
-**Layer B is required for text cleaning.** `/clean` always applies the default
-strategy (from `config/clean_strategy.json`, `{"default_strategy": "paraphrase@0.8,mlm@0.2"}`) to a text file after Layer A, unless the request passes its own `"strategy"` option (an ordered `tactic@intensity` list). A strategy step is `tactic@intensity`; the `mlm` step needs `transformers` + `roberta-large`, and any LLM step (`paraphrase`, `humanize`, …) needs the `WATERMARKS_REWRITE_*` config. If the required backend/model isn't configured — or no strategy is available — `/clean` **rejects the request with a 400**. Precedence for the config path: `--strategy-config` CLI flag > `WATERMARKS_CLEAN_STRATEGY_FILE` env var > the default `config/clean_strategy.json`. A non-empty `WATERMARKS_CLEAN_STRATEGY` env var replaces the file's strategy altogether.
+**Layer B runs by default for text cleaning.** `/clean` applies the default
+strategy (from `config/clean_strategy.json`, `{"default_strategy": "paraphrase@0.8,mlm@0.2"}`) to a text file after Layer A, unless the request passes its own `"strategy"` option (an ordered `tactic@intensity` list). A strategy step is `tactic@intensity`; the `mlm` step needs `transformers` + `roberta-large`, and any LLM step (`paraphrase`, `humanize`, …) needs the `WATERMARKS_REWRITE_*` config. If the required backend/model isn't configured — or no strategy is available — `/clean` **rejects the request with a 400**. Precedence for the config path: `--strategy-config` CLI flag > `WATERMARKS_CLEAN_STRATEGY_FILE` env var > the default `config/clean_strategy.json`. A non-empty `WATERMARKS_CLEAN_STRATEGY` env var replaces the file's strategy altogether. The strategy `none` (env, config file, or per request) is the explicit opt-out: Layer A only, the wording comes back unchanged, no rewrite backend is needed, and `report.layer_b` is `{"skipped": true, "strategy": "none", ...}`. It cannot be combined with rewrite steps.
 
 Images publish automatically on `v*` tags via [`.github/workflows/release-images.yml`](.github/workflows/release-images.yml).
 

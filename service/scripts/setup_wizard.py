@@ -80,6 +80,9 @@ PROFILES: list[Profile] = [
     Profile("precise", "paraphrase@0.8", "0.3", True),
     Profile("balanced", "paraphrase@0.8,humanize@0.5", "0.5", True),
     Profile("aggressive", "paraphrase@0.8,mlm@0.2", "0.9", False),
+    # No rewrite: /clean removes invisible marks only and keeps the wording. The
+    # provider stays configured so a request can still ask for a rewrite.
+    Profile("preserve", "none", "0.3", False),
 ]
 
 # Every key this wizard owns in .env. Keys missing from a result are removed,
@@ -117,6 +120,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "precise": "Precise (recommended): one careful paraphrase + fidelity check",
         "balanced": "Balanced: paraphrase + humanize + fidelity check",
         "aggressive": "Aggressive: paraphrase + mlm word swaps (English only, no check)",
+        "preserve": (
+            "Preserve text: no rewrite, only invisible marks are removed "
+            "(does not treat statistical watermarks)"
+        ),
         "testing": "Testing the connection...",
         "test_ok": "Connection OK.",
         "test_failed": "Connection failed: {err}",
@@ -148,6 +155,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "precise": "Preciso (recomendado): uma paráfrase cuidadosa + verificação de fidelidade",
         "balanced": "Equilibrado: paráfrase + humanização + verificação de fidelidade",
         "aggressive": "Agressivo: paráfrase + troca de palavras mlm (só inglês, sem verificação)",
+        "preserve": (
+            "Preservar texto: sem reescrita, só remove marcas invisíveis "
+            "(não trata marca d'água estatística)"
+        ),
         "testing": "Testando a conexão...",
         "test_ok": "Conexão OK.",
         "test_failed": "A conexão falhou: {err}",

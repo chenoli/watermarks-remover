@@ -95,9 +95,31 @@ def test_local_preset_drops_online_only_keys():
 
 def test_every_profile_strategy_is_valid():
     for profile in wiz.PROFILES:
-        parse_strategy(profile.strategy)
+        # The server accepts every profile strategy, including "none".
+        assert server._validate_strategy(profile.strategy) == profile.strategy
+        if profile.strategy != server.NO_REWRITE:
+            parse_strategy(profile.strategy)
     # Precision first: the default profile never runs the English-only mlm step.
     assert "mlm" not in wiz.PROFILES[0].strategy
+    assert wiz.PROFILES[0].key == "precise"
+
+
+def test_preserve_profile_turns_the_rewrite_off():
+    profile = _profile("preserve")
+    updates = wiz.build_env_updates(
+        _preset("deepseek"), "https://api.deepseek.com", "deepseek-flash", SECRET, profile
+    )
+    assert updates["WATERMARKS_CLEAN_STRATEGY"] == "none"
+    assert updates["WATERMARKS_REWRITE_VERIFY"] is None
+    assert updates["WATERMARKS_WITH_MLM"] is None
+    # The provider stays configured for per-request rewrites.
+    assert updates["WATERMARKS_REWRITE_MODEL"] == "deepseek-flash"
+
+
+@pytest.mark.parametrize("lang", sorted(wiz.MESSAGES))
+def test_every_profile_has_a_label(lang):
+    for profile in wiz.PROFILES:
+        assert wiz.MESSAGES[lang][profile.key]
 
 
 def test_presets_cover_local_and_online():

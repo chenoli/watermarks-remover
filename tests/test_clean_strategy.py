@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import sys
 from pathlib import Path
 
@@ -151,8 +152,57 @@ def test_load_default_strategy_bad_strategy(tmp_path):
 
 def test_clean_text_requires_layer_b(monkeypatch):
     monkeypatch.setattr(server, "_DEFAULT_STRATEGY", None)
-    with pytest.raises(ValueError, match="Layer B rewrite is required"):
+    with pytest.raises(ValueError, match="no Layer B strategy"):
         server._clean_payload(b"hello world", "a.txt", {})
+
+
+# --- server: strategy "none" (Layer A only) ---------------------------------
+
+
+def _no_rewrite(*_a, **_k):
+    raise AssertionError("Layer B must not run for strategy none")
+
+
+@pytest.mark.parametrize("spec", ["none", "NONE", " none "])
+def test_clean_options_strategy_none_is_normalized(spec):
+    assert _parse_clean_options({"strategy": spec})["strategy"] == "none"
+
+
+@pytest.mark.parametrize("spec", ["none,paraphrase@0.8", "paraphrase@0.8,none", "none@0.5"])
+def test_clean_options_strategy_none_does_not_combine(spec):
+    with pytest.raises(ValueError):
+        _parse_clean_options({"strategy": spec})
+
+
+def test_load_default_strategy_none(tmp_path):
+    p = tmp_path / "c.json"
+    p.write_text('{"default_strategy": "none"}')
+    assert _load_default_strategy(p) == "none"
+
+
+def test_env_strategy_none(monkeypatch, tmp_path):
+    monkeypatch.setenv("WATERMARKS_CLEAN_STRATEGY", "none")
+    assert server._resolve_default_strategy(tmp_path / "absent.json") == "none"
+
+
+def test_clean_text_none_per_request_keeps_wording(monkeypatch):
+    monkeypatch.setattr(server, "_DEFAULT_STRATEGY", "paraphrase@0.8")
+    monkeypatch.setattr(server, "_apply_layer_b", _no_rewrite)
+    text = "Be honest. I had a bunch, pra ser sincero.\n"
+    opts = _parse_clean_options({"strategy": "none"})
+    out = server._clean_payload(text.encode(), "a.txt", opts)
+    assert out["ok"] is True
+    assert base64.b64decode(out["cleaned"]).decode() == text
+    assert out["report"]["layer_b"]["skipped"] is True
+    assert "not treated" in out["report"]["layer_b"]["note"]
+
+
+def test_clean_text_none_default_still_runs_layer_a(monkeypatch):
+    monkeypatch.setattr(server, "_DEFAULT_STRATEGY", "none")
+    monkeypatch.setattr(server, "_apply_layer_b", _no_rewrite)
+    out = server._clean_payload("Be\u200b honest.".encode(), "a.txt", {})
+    assert base64.b64decode(out["cleaned"]).decode() == "Be honest."
+    assert out["report"]["layer_b"]["strategy"] == "none"
 
 
 # --- server: reject when backend/model unavailable --------------------------

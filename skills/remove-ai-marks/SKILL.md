@@ -96,7 +96,9 @@ images: run watermark detection on the input and on the cleaned output,
 included in the report), and `strategy` (text: an ordered `tactic@intensity`
 list such as `"paraphrase@0.8,mlm@0.2"` that runs the Layer B rewrite after
 Layer A; when omitted the default from `config/clean_strategy.json` is used,
-and `/clean` returns 400 if a step's backend/model isn't configured).
+and `/clean` returns 400 if a step's backend/model isn't configured). The value
+`"none"` turns the rewrite off: Layer A only, wording untouched, and
+`report.layer_b.skipped` is `true`.
 
 **Inspect first** (decide, don't guess):
 
@@ -201,6 +203,14 @@ curl -s -X POST "$WM/clean" -H 'Content-Type: application/json' \
 ### 4. Layer B — always offer rewrite (prose)
 
 After Layer A, **always propose** a statistical-mark reduction pass for natural-language content. Do not skip this step silently.
+
+**Exception, "Preserve text" mode:** when the service default strategy is
+`none` (`setup.cmd` profile "Preserve text", `WATERMARKS_CLEAN_STRATEGY=none`),
+`/clean` answers with `report.layer_b.skipped: true` and the original wording.
+The operator chose to keep the text as close to the original as possible, so do
+not run or push a rewrite. Say once, in the report, that statistical marks were
+not treated and that a rewrite is available on request
+(`options.strategy`, e.g. `"paraphrase@0.8"`); run it only if the user asks.
 
 For **plain text** (pasted / `.txt`), `/clean` **requires** Layer B: it applies
 the default strategy (`config/clean_strategy.json`, e.g.

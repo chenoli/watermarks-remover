@@ -114,8 +114,25 @@ ALLOWED_CLEAN_OPTIONS = {
 }
 
 # Default Layer B strategy loaded from the strategy config file (overridable by
-# env/CLI). None means no Layer B rewrite on text.
+# env/CLI). None means no strategy is configured (text /clean answers 400).
 _DEFAULT_STRATEGY: str | None = None
+
+# Strategy value that turns the Layer B rewrite off: text is cleaned by Layer A
+# only and comes back with its wording untouched.
+NO_REWRITE = "none"
+
+
+def _validate_strategy(spec: str) -> str:
+    """Return the normalized strategy; raises ValueError on a bad one.
+
+    ``none`` is its own value and never combines with rewrite steps.
+    """
+    if spec.strip().lower() == NO_REWRITE:
+        return NO_REWRITE
+    from rewrite_text import parse_strategy
+
+    parse_strategy(spec)
+    return spec
 
 
 @cache
@@ -921,9 +938,7 @@ def _parse_clean_options(options: Any) -> dict[str, Any]:
     # A per-request strategy overrides the default; validate it up front so a bad
     # tactic/intensity is a 400 rather than a mid-clean failure.
     if "strategy" in options:
-        from rewrite_text import parse_strategy
-
-        parse_strategy(options["strategy"])
+        options["strategy"] = _validate_strategy(options["strategy"])
     return options
 
 
@@ -943,10 +958,7 @@ def _load_default_strategy(config_path: Path) -> str | None:
     spec = data.get("default_strategy")
     if spec is None:
         return None
-    from rewrite_text import parse_strategy
-
-    parse_strategy(spec)  # raises ValueError on a bad strategy
-    return spec
+    return _validate_strategy(spec)  # raises ValueError on a bad strategy
 
 
 def _resolve_default_strategy(config_path: Path) -> str | None:
@@ -954,13 +966,10 @@ def _resolve_default_strategy(config_path: Path) -> str | None:
     spec = os.environ.get("WATERMARKS_CLEAN_STRATEGY", "").strip()
     if not spec:
         return _load_default_strategy(config_path)
-    from rewrite_text import parse_strategy
-
     try:
-        parse_strategy(spec)
+        return _validate_strategy(spec)
     except ValueError as e:
         raise SystemExit(f"invalid WATERMARKS_CLEAN_STRATEGY {spec!r}: {e}") from e
-    return spec
 
 
 def _apply_layer_b(text: str, strategy: str, options: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -1264,17 +1273,28 @@ def _clean_payload(data: bytes, name: str, options: dict[str, Any]) -> dict[str,
                 aggressive_homoglyphs=bool(options.get("aggressive_homoglyphs")),
                 normalize_spaces=bool(options.get("normalize_spaces", True)),
             )
-            # Layer B is a required step for text cleaning: always apply the
-            # default (or per-request) rewrite strategy and reject (400) when no
-            # strategy is available or a step's backend/model can't run.
+            # Text cleaning applies the default (or per-request) Layer B strategy
+            # after Layer A and rejects (400) when no strategy is configured or a
+            # step's backend/model can't run. Strategy "none" is an explicit
+            # opt-out: Layer A only, wording untouched.
             strategy = options.get("strategy") or _DEFAULT_STRATEGY
             if not strategy:
                 raise ValueError(
-                    "Layer B rewrite is required for text cleaning; configure a "
-                    "default strategy (config/clean_strategy.json) or pass "
-                    "options.strategy"
+                    "no Layer B strategy for text cleaning; configure a default "
+                    "strategy (config/clean_strategy.json) or pass options.strategy "
+                    '(use "none" for Layer A only)'
                 )
-            cleaned, layer_b = _apply_layer_b(cleaned, strategy, options)
+            if strategy == NO_REWRITE:
+                layer_b = {
+                    "skipped": True,
+                    "strategy": NO_REWRITE,
+                    "note": (
+                        "Layer A only: wording left untouched. Statistical "
+                        "(token-sampling) watermarks were not treated."
+                    ),
+                }
+            else:
+                cleaned, layer_b = _apply_layer_b(cleaned, strategy, options)
             if detect_after:
                 detector_reports["after"] = run_text_detectors(cleaned)
             cleaned_bytes = cleaned.encode("utf-8", errors="surrogateescape")

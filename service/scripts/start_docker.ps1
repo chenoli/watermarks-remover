@@ -64,7 +64,12 @@ if (-not $env:WATERMARKS_REWRITE_BACKEND) {
 }
 $Strategy = $env:WATERMARKS_CLEAN_STRATEGY
 if (-not $Strategy) { $Strategy = "paraphrase@0.8" }
-Write-Step "Layer B: $($env:WATERMARKS_REWRITE_BACKEND) / $($env:WATERMARKS_REWRITE_MODEL), strategy $Strategy"
+$NoRewrite = "$Strategy".Trim() -ieq "none"
+if ($NoRewrite) {
+    Write-Step "Layer B off (strategy none): wording is kept, only invisible marks are removed"
+} else {
+    Write-Step "Layer B: $($env:WATERMARKS_REWRITE_BACKEND) / $($env:WATERMARKS_REWRITE_MODEL), strategy $Strategy"
+}
 
 # --- 3. Build and start wr-core -------------------------------------------------
 Stop-PortListeners $Port $DockerProxies
@@ -92,6 +97,10 @@ if ($Strategy -match '(^|,)\s*mlm@') {
 
 Write-Host ""
 Write-Host "Service ready at http://127.0.0.1:$Port (Docker container wr-core)" -ForegroundColor Green
-Write-Host "  Layer B backend: $($env:WATERMARKS_REWRITE_BACKEND) / $($env:WATERMARKS_REWRITE_MODEL)"
+if ($NoRewrite) {
+    Write-Host "  Layer B: off (strategy none)"
+} else {
+    Write-Host "  Layer B backend: $($env:WATERMARKS_REWRITE_BACKEND) / $($env:WATERMARKS_REWRITE_MODEL)"
+}
 if ($env:WATERMARKS_SERVER_API_KEY) { Write-Host "  API key required: send 'Authorization: Bearer <WATERMARKS_SERVER_API_KEY from .env>'" }
 Write-Host "  Logs: docker compose logs -f wr-core    Stop: docker compose down"
